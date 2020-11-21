@@ -4,12 +4,10 @@ import torch.nn as nn
 import torch.optim as optim
 import logging
 
-
 word_embeds = None
 word_to_ix = None
 char_embeds = None
 char_to_ix = None
-
 '''
 All functions in this script requires a configuration dictionary which contains flags and 
 other attributes for configuring the experiments.
@@ -26,7 +24,8 @@ def factory_load_embeddings(config_dict):
     :param config_dict: s configuration dictionary
     '''
     global word_embeds, word_to_ix, char_embeds, char_to_ix
-    word_embeds, word_to_ix, char_embeds, char_to_ix = load_model_embeddings(config_dict)
+    word_embeds, word_to_ix, char_embeds, char_to_ix = load_model_embeddings(
+        config_dict)
 
 
 def create_model(config_dict):
@@ -44,7 +43,8 @@ def create_model(config_dict):
         mention_rep_size = context_vector_size + \
                             ((word_embeds.shape[1] + config_dict["char_rep_size"]) * 5)
     else:
-        mention_rep_size = context_vector_size + word_embeds.shape[1] + config_dict["char_rep_size"]
+        mention_rep_size = context_vector_size + word_embeds.shape[
+            1] + config_dict["char_rep_size"]
 
     input_dim = mention_rep_size * 3
 
@@ -55,8 +55,11 @@ def create_model(config_dict):
     third_dim = second_dim
     model_dims = [input_dim, second_dim, third_dim]
 
-    model = CDCorefScorer(word_embeds, word_to_ix, word_embeds.shape[0],
-                          char_embedding=char_embeds, char_to_ix=char_to_ix,
+    model = CDCorefScorer(word_embeds,
+                          word_to_ix,
+                          word_embeds.shape[0],
+                          char_embedding=char_embeds,
+                          char_to_ix=char_to_ix,
                           char_rep_size=config_dict["char_rep_size"],
                           dims=model_dims,
                           use_mult=config_dict["use_mult"],
@@ -76,14 +79,23 @@ def create_optimizer(config_dict, model):
     '''
     lr = config_dict["lr"]
     optimizer = None
-    parameters = filter(lambda p: p.requires_grad,model.parameters())
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
     if config_dict["optimizer"] == 'adadelta':
-        optimizer = optim.Adadelta(parameters, lr=lr,
+        optimizer = optim.Adadelta(parameters,
+                                   lr=lr,
                                    weight_decay=config_dict["weight_decay"])
+    elif config_dict["optimizer"] == 'rmsprop':
+        optimizer = optim.RMSprop(parameters,
+                                  lr=lr,
+                                  weight_decay=config_dict["weight_decay"])
     elif config_dict["optimizer"] == 'adam':
-        optimizer = optim.Adam(parameters, lr=lr, weight_decay=config_dict["weight_decay"])
+        optimizer = optim.Adam(parameters,
+                               lr=lr,
+                               weight_decay=config_dict["weight_decay"])
     elif config_dict["optimizer"] == 'sgd':
-        optimizer = optim.SGD(parameters, lr=lr, momentum=config_dict["momentum"],
+        optimizer = optim.SGD(parameters,
+                              lr=lr,
+                              momentum=config_dict["momentum"],
                               nesterov=True)
 
     assert (optimizer is not None), "Config error, check the optimizer field"
@@ -134,8 +146,9 @@ def load_model_embeddings(config_dict):
 
     if config_dict["use_pretrained_char"]:
         logging.info('Loading pre-trained char embeddings...')
-        char_embeds, vocab = load_embeddings(config_dict["char_pretrained_path"],
-                                             config_dict["char_vocab_path"])
+        char_embeds, vocab = load_embeddings(
+            config_dict["char_pretrained_path"],
+            config_dict["char_vocab_path"])
 
         char_to_ix = {}
         for char in vocab:
@@ -152,6 +165,7 @@ def load_model_embeddings(config_dict):
         logging.info('Char embeddings have been loaded.')
     else:
         logging.info('Loading one-hot char embeddings...')
-        char_embeds, char_to_ix = load_one_hot_char_embeddings(config_dict["char_vocab_path"])
+        char_embeds, char_to_ix = load_one_hot_char_embeddings(
+            config_dict["char_vocab_path"])
 
     return word_embeds, word_to_ix, char_embeds, char_to_ix
