@@ -1,1 +1,4 @@
 *.pyc
+data/external/glove.6B.300d.txt
+feature_sets/*
+models/*
