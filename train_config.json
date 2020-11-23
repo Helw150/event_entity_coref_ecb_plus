@@ -1,22 +1,22 @@
 {
-    "batch_size": 16,
+    "batch_size": 128,
     "char_pretrained_path": "data/external/char_embed/glove.840B.300d-char.npy",
     "char_rep_size": 50,
     "char_vocab_path": "data/external/char_embed/glove.840B.300d-char.vocab",
-    "dev_path": "data/processed/cybulska_setup/full_swirl_ecb/dev_data",
+    "dev_path": "feature_sets/roberta/dev_data",
     "dev_th_range": [0.5, 0.6],
 
     "entity_merge_threshold": 0.5,
     "epochs": 50,
     "event_merge_threshold": 0.5,
     "feature_size": 50,
-    "glove_path": "/home/nlp/barhoms/joint_coref/resources/glove.6B.300d.txt",
+    "glove_path": "data/external/glove.6B.300d.txt",
     "gpu_num": 0,
 
     "load_predicted_topics": false,
     "log_interval": 32,
     "loss": "bce",
-    "lr": 0.0001,
+    "lr": 0.001,
     "merge_iters": 2,
     "momentum": 0,
 
@@ -30,12 +30,16 @@
 
     "test_use_gold_mentions": true,
     "train_init_wd_entity_with_gold": true,
-    "train_path": "data/processed/cybulska_setup/full_swirl_ecb/training_data",
-    "use_args_feats": true,
-    "use_binary_feats": true,
+    "train_path": "feature_sets/roberta/training_data",
+    "use_args_feats": false,
+    "use_binary_feats": false,
     "use_diff": false,
-    "use_mult": true,
-    "use_pretrained_char": true,
+    "use_mult": false,
+    "use_transformer": true,
+    "transformer_heads": 4,
+    "transformer_hidden": 768,
+    "transformer_layers": 1,
+    "use_pretrained_char": false,
 
     "wd_entity_coref_file": "data/external/stanford_neural_wd_entity_coref_out/ecb_wd_coref.json",
     "weight_decay": 0

@@ -29,9 +29,9 @@ def order_docs_by_topics(docs):
     for doc_id, doc in docs.items():
         topic_id, doc_no = doc_id.split('_')
         if 'ecbplus' in doc_no:
-            topic_id = topic_id + '_' +'ecbplus'
+            topic_id = topic_id + '_' + 'ecbplus'
         else:
-            topic_id = topic_id + '_' +'ecb'
+            topic_id = topic_id + '_' + 'ecb'
         if topic_id not in corpus.topics:
             topic = Topic(topic_id)
             corpus.add_topic(topic_id, topic)
@@ -59,8 +59,9 @@ def load_ECB_plus(processed_ecb_file):
         stripped_line = line.strip()
         try:
             if stripped_line:
-                doc_id,sent_id,token_num,word, coref_chain = stripped_line.split('\t')
-                doc_id = doc_id.replace('.xml','')
+                doc_id, sent_id, token_num, word, coref_chain = stripped_line.split(
+                    '\t')
+                doc_id = doc_id.replace('.xml', '')
         except:
             row = stripped_line.split('\t')
             clean_row = []
@@ -91,10 +92,10 @@ def load_ECB_plus(processed_ecb_file):
             if sent_changed:
                 new_sent = Sentence(sent_id)
                 sent_changed = False
-                new_doc.add_sentence(sent_id,new_sent)
+                new_doc.add_sentence(sent_id, new_sent)
                 last_sent_id = sent_id
 
-            new_tok = Token(token_num,word,'-')
+            new_tok = Token(token_num, word, '-')
             new_sent.add_token(new_tok)
 
     return docs
@@ -106,7 +107,7 @@ def find_args_by_dependency_parsing(dataset, is_gold):
     :param dataset: an object represents the split (Corpus object)
     :param is_gold: whether to match arguments and predicates with gold or predicted mentions
     '''
-    global matched_args, matched_args_same_ix, matched_events,matched_events_same_ix
+    global matched_args, matched_args_same_ix, matched_events, matched_events_same_ix
     matched_args = 0
     matched_args_same_ix = 0
     matched_events = 0
@@ -135,7 +136,8 @@ def find_left_and_right_mentions(dataset, is_gold):
                 add_left_and_right_mentions(sent, is_gold)
 
 
-def match_subj_with_event(verb_text, verb_index, subj_text, subj_index, sent, is_gold):
+def match_subj_with_event(verb_text, verb_index, subj_text, subj_index, sent,
+                          is_gold):
     '''
     Given a verb and a subject extracted by the dependency parser , this function tries to match
     the verb with an event mention and the subject with an entity mention
@@ -150,17 +152,22 @@ def match_subj_with_event(verb_text, verb_index, subj_text, subj_index, sent, is
     if event is not None and event.arg0 is None:
         entity = match_entity(subj_text, subj_index, sent, is_gold)
         if entity is not None:
-            if event.arg1 is not None and event.arg1 == (entity.mention_str, entity.mention_id):
+            if event.arg1 is not None and event.arg1 == (entity.mention_str,
+                                                         entity.mention_id):
                 return
-            if event.amloc is not None and event.amloc == (entity.mention_str, entity.mention_id):
+            if event.amloc is not None and event.amloc == (entity.mention_str,
+                                                           entity.mention_id):
                 return
-            if event.amtmp is not None and event.amtmp == (entity.mention_str, entity.mention_id):
+            if event.amtmp is not None and event.amtmp == (entity.mention_str,
+                                                           entity.mention_id):
                 return
             event.arg0 = (entity.mention_str, entity.mention_id)
-            entity.add_predicate((event.mention_str, event.mention_id), 'A0')
+            entity.add_predicate((event.mention_str, event.mention_id), 'A0',
+                                 (event.start_offset, event.end_offset))
 
 
-def match_obj_with_event(verb_text, verb_index, obj_text, obj_index, sent, is_gold):
+def match_obj_with_event(verb_text, verb_index, obj_text, obj_index, sent,
+                         is_gold):
     '''
     Given a verb and an object extracted by the dependency parser , this function tries to match
     the verb with an event mention and the object with an entity mention
@@ -175,14 +182,18 @@ def match_obj_with_event(verb_text, verb_index, obj_text, obj_index, sent, is_go
     if event is not None and event.arg1 is None:
         entity = match_entity(obj_text, obj_index, sent, is_gold)
         if entity is not None:
-            if event.arg0 is not None and event.arg0 == (entity.mention_str, entity.mention_id):
+            if event.arg0 is not None and event.arg0 == (entity.mention_str,
+                                                         entity.mention_id):
                 return
-            if event.amloc is not None and event.amloc == (entity.mention_str, entity.mention_id):
+            if event.amloc is not None and event.amloc == (entity.mention_str,
+                                                           entity.mention_id):
                 return
-            if event.amtmp is not None and event.amtmp == (entity.mention_str, entity.mention_id):
+            if event.amtmp is not None and event.amtmp == (entity.mention_str,
+                                                           entity.mention_id):
                 return
             event.arg1 = (entity.mention_str, entity.mention_id)
-            entity.add_predicate((event.mention_str, event.mention_id), 'A1')
+            entity.add_predicate((event.mention_str, event.mention_id), 'A1',
+                                 (event.start_offset, event.end_offset))
 
 
 def match_event(verb_text, verb_index, sent, is_gold):
@@ -236,12 +247,13 @@ def match_entity(entity_text, entity_index, sent, is_gold):
                 return entity
     return None
 
+
 '''
 Borrowed with modifications from https://github.com/NSchrading/intro-spacy-nlp/blob/master/subject_object_extraction.py
 '''
 
 SUBJECTS = ["nsubj"]
-PASS_SUBJ = ["nsubjpass",  "csubjpass"]
+PASS_SUBJ = ["nsubjpass", "csubjpass"]
 OBJECTS = ["dobj", "iobj", "attr", "oprd"]
 
 
@@ -256,7 +268,10 @@ def getSubsFromConjunctions(subs):
         rights = list(sub.rights)
         rightDeps = {tok.lower_ for tok in rights}
         if "and" in rightDeps:
-            moreSubs.extend([tok for tok in rights if tok.dep_ in SUBJECTS or tok.pos_ == "NOUN"])
+            moreSubs.extend([
+                tok for tok in rights
+                if tok.dep_ in SUBJECTS or tok.pos_ == "NOUN"
+            ])
             if len(moreSubs) > 0:
                 moreSubs.extend(getSubsFromConjunctions(moreSubs))
     return moreSubs
@@ -274,7 +289,10 @@ def getObjsFromConjunctions(objs):
         rights = list(obj.rights)
         rightDeps = {tok.lower_ for tok in rights}
         if "and" in rightDeps:
-            moreObjs.extend([tok for tok in rights if tok.dep_ in OBJECTS or tok.pos_ == "NOUN"])
+            moreObjs.extend([
+                tok for tok in rights
+                if tok.dep_ in OBJECTS or tok.pos_ == "NOUN"
+            ])
             if len(moreObjs) > 0:
                 moreObjs.extend(getObjsFromConjunctions(moreObjs))
     return moreObjs
@@ -289,7 +307,7 @@ def getObjsFromPrepositions(deps):
     objs = []
     for dep in deps:
         if dep.pos_ == "ADP" and dep.dep_ == "prep":
-            objs.extend([tok for tok in dep.rights if tok.dep_  in OBJECTS])
+            objs.extend([tok for tok in dep.rights if tok.dep_ in OBJECTS])
     return objs
 
 
@@ -316,8 +334,12 @@ def getAllSubs(v):
     :param v: an extracted verb
     :return: all possible subjects of the verb
     '''
-    subs = [tok for tok in v.lefts if tok.dep_ in SUBJECTS and tok.pos_ != "DET"]
-    pass_subs = [tok for tok in v.lefts if tok.dep_ in PASS_SUBJ and tok.pos_ != "DET"]
+    subs = [
+        tok for tok in v.lefts if tok.dep_ in SUBJECTS and tok.pos_ != "DET"
+    ]
+    pass_subs = [
+        tok for tok in v.lefts if tok.dep_ in PASS_SUBJ and tok.pos_ != "DET"
+    ]
     if len(subs) > 0:
         subs.extend(getSubsFromConjunctions(subs))
     return subs, pass_subs
@@ -334,7 +356,8 @@ def getAllObjs(v):
     objs.extend(getObjsFromPrepositions(rights))
 
     potentialNewVerb, potentialNewObjs = getObjFromXComp(rights)
-    if potentialNewVerb is not None and potentialNewObjs is not None and len(potentialNewObjs) > 0:
+    if potentialNewVerb is not None and potentialNewObjs is not None and len(
+            potentialNewObjs) > 0:
         objs.extend(potentialNewObjs)
         v = potentialNewVerb
     if len(objs) > 0:
@@ -355,26 +378,38 @@ def findSVOs(parsed_sent, sent, is_gold):
     '''
     global matched_events, matched_events_same_ix
     global matched_args, matched_args_same_ix
-    verbs = [tok for tok in parsed_sent if tok.pos_ == "VERB" and tok.dep_ != "aux"]
+    verbs = [
+        tok for tok in parsed_sent if tok.pos_ == "VERB" and tok.dep_ != "aux"
+    ]
     for v in verbs:
         subs, pass_subs = getAllSubs(v)
         v, objs = getAllObjs(v)
         if len(subs) > 0 or len(objs) > 0 or len(pass_subs) > 0:
             for sub in subs:
                 match_subj_with_event(verb_text=v.orth_,
-                                      verb_index=v.i, subj_text=sub.orth_,
-                                      subj_index=sub.i, sent=sent, is_gold=is_gold)
+                                      verb_index=v.i,
+                                      subj_text=sub.orth_,
+                                      subj_index=sub.i,
+                                      sent=sent,
+                                      is_gold=is_gold)
 
             for obj in objs:
                 match_obj_with_event(verb_text=v.orth_,
-                                        verb_index=v.i, obj_text=obj.orth_,
-                                        obj_index=obj.i, sent=sent, is_gold=is_gold)
+                                     verb_index=v.i,
+                                     obj_text=obj.orth_,
+                                     obj_index=obj.i,
+                                     sent=sent,
+                                     is_gold=is_gold)
             for obj in pass_subs:
                 match_obj_with_event(verb_text=v.orth_,
-                                        verb_index=v.i, obj_text=obj.orth_,
-                                        obj_index=obj.i, sent=sent, is_gold=is_gold)
+                                     verb_index=v.i,
+                                     obj_text=obj.orth_,
+                                     obj_index=obj.i,
+                                     sent=sent,
+                                     is_gold=is_gold)
 
-    find_nominalizations_args(parsed_sent, sent, is_gold) # Handling nominalizations
+    find_nominalizations_args(parsed_sent, sent,
+                              is_gold)  # Handling nominalizations
 
 
 def find_nominalizations_args(parsed_sent, sent, is_gold):
@@ -388,12 +423,17 @@ def find_nominalizations_args(parsed_sent, sent, is_gold):
     possible_noms = [tok for tok in parsed_sent if tok.pos_ == "NOUN"]
     POSS = ['poss', 'possessive']
     for n in possible_noms:
-        subs = [tok for tok in n.lefts if tok.dep_ in POSS and tok.pos_ != "DET"]
+        subs = [
+            tok for tok in n.lefts if tok.dep_ in POSS and tok.pos_ != "DET"
+        ]
         if len(subs) > 0:
             for sub in subs:
                 match_subj_with_event(verb_text=n.orth_,
-                                      verb_index=n.i, subj_text=sub.orth_,
-                                      subj_index=sub.i, sent=sent, is_gold=is_gold)
+                                      verb_index=n.i,
+                                      subj_text=sub.orth_,
+                                      subj_index=sub.i,
+                                      sent=sent,
+                                      is_gold=is_gold)
 
 
 def add_left_and_right_mentions(sent, is_gold):
@@ -406,30 +446,44 @@ def add_left_and_right_mentions(sent, is_gold):
     sent_events = sent.gold_event_mentions if is_gold else sent.pred_event_mentions
     for event in sent_events:
         if event.arg0 is None:
-            left_ent = sent.find_nearest_entity_mention(event, is_left=True, is_gold=is_gold)
+            left_ent = sent.find_nearest_entity_mention(event,
+                                                        is_left=True,
+                                                        is_gold=is_gold)
             if left_ent is not None:
                 double_arg = False
-                if event.arg1 is not None and event.arg1 == (left_ent.mention_str, left_ent.mention_id):
+                if event.arg1 is not None and event.arg1 == (
+                        left_ent.mention_str, left_ent.mention_id):
                     double_arg = True
-                if event.amloc is not None and event.amloc == (left_ent.mention_str, left_ent.mention_id):
+                if event.amloc is not None and event.amloc == (
+                        left_ent.mention_str, left_ent.mention_id):
                     double_arg = True
-                if event.amtmp is not None and event.amtmp == (left_ent.mention_str, left_ent.mention_id):
+                if event.amtmp is not None and event.amtmp == (
+                        left_ent.mention_str, left_ent.mention_id):
                     double_arg = True
 
                 if not double_arg:
                     event.arg0 = (left_ent.mention_str, left_ent.mention_id)
-                    left_ent.add_predicate((event.mention_str, event.mention_id), 'A0')
+                    left_ent.add_predicate(
+                        (event.mention_str, event.mention_id), 'A0',
+                        (event.start_offset, event.end_offset))
 
         if event.arg1 is None:
-            right_ent = sent.find_nearest_entity_mention(event, is_left=False, is_gold=is_gold)
+            right_ent = sent.find_nearest_entity_mention(event,
+                                                         is_left=False,
+                                                         is_gold=is_gold)
             if right_ent is not None:
                 double_arg = False
-                if event.arg0 is not None and event.arg0 == (right_ent.mention_str, right_ent.mention_id):
+                if event.arg0 is not None and event.arg0 == (
+                        right_ent.mention_str, right_ent.mention_id):
                     double_arg = True
-                if event.amloc is not None and event.amloc == (right_ent.mention_str, right_ent.mention_id):
+                if event.amloc is not None and event.amloc == (
+                        right_ent.mention_str, right_ent.mention_id):
                     double_arg = True
-                if event.amtmp is not None and event.amtmp == (right_ent.mention_str, right_ent.mention_id):
+                if event.amtmp is not None and event.amtmp == (
+                        right_ent.mention_str, right_ent.mention_id):
                     double_arg = True
                 if not double_arg:
                     event.arg1 = (right_ent.mention_str, right_ent.mention_id)
-                    right_ent.add_predicate((event.mention_str, event.mention_id), 'A1')
+                    right_ent.add_predicate(
+                        (event.mention_str, event.mention_id), 'A1',
+                        (event.start_offset, event.end_offset))

@@ -9,7 +9,7 @@ class Corpus(object):
     def __init__(self):
         self.topics = {}
 
-    def add_topic(self,topic_id, topic):
+    def add_topic(self, topic_id, topic):
         '''
         Gets a topic id and a topic object and add it to the topics dictionary
         :param topic_id: topic id
@@ -24,7 +24,7 @@ class Topic(object):
     A class that represents a topic in the corpus.
     It contains a dictionary of Document objects.
     '''
-    def __init__(self,topic_id):
+    def __init__(self, topic_id):
         self.topic_id = topic_id
         self.docs = {}
 
@@ -46,7 +46,7 @@ class Document(object):
     A class that represents a document.
     It contains the document ID and a dictionary of sentence objects.
     '''
-    def __init__(self,doc_name):
+    def __init__(self, doc_name):
         '''
         A c'tor for a document object.
         set the document name, and create an empty sentences dictionary
@@ -62,16 +62,16 @@ class Document(object):
         '''
         return self.sentences
 
-    def add_sentence(self,sent_id,sent):
-       '''
+    def add_sentence(self, sent_id, sent):
+        '''
         This function gets a sentence object and its ID and adds it to the sentences dictionary
        :param sent_id: the sentence id (its ordinal number in the document)
        :param sent: a sentence object
        '''
-       if sent_id not in self.sentences:
-           self.sentences[sent_id] = sent
+        if sent_id not in self.sentences:
+            self.sentences[sent_id] = sent
 
-    def add_mention(self,sent_id,mention):
+    def add_mention(self, sent_id, mention):
         '''
          This function gets a mention object and its sentence id and adds it to the sentences dictionary
         :param sent_id: the sentence id (its ordinal number in the document)
@@ -79,7 +79,7 @@ class Document(object):
         '''
         self.sentences[sent_id].add_mention(mention)
 
-    def fetch_mention_string(self,sent_id,start_offset,end_offset):
+    def fetch_mention_string(self, sent_id, start_offset, end_offset):
         '''
         This function gets a sentence id, start offset of the mention and an end offset of
         the mention and finds the mention's string
@@ -89,7 +89,8 @@ class Document(object):
         :return: the mention string and a list of token objects
         '''
         if sent_id in self.sentences:
-            return self.sentences[sent_id].fetch_mention_string(start_offset,end_offset)
+            return self.sentences[sent_id].fetch_mention_string(
+                start_offset, end_offset)
         else:
             return None
 
@@ -126,16 +127,16 @@ class Sentence(object):
     It contains the sentence ID, a list of token objects, a list of event mention objects
      and a list of entity mention objects.
     '''
-    def __init__(self,sent_id):
+    def __init__(self, sent_id):
         '''
         A c'tor for a document object.
         sets the sentence ID, creates empty lists for the token and mention objects (gold mentions and predicted mentions).
         :param sent_id: the sentence ID (its ordinal number in the document)
         '''
-        self.sent_id = sent_id # a string
+        self.sent_id = sent_id  # a string
         self.tokens = []
-        self.gold_event_mentions = [] # gold event mentions
-        self.gold_entity_mentions = [] # gold event mentions
+        self.gold_event_mentions = []  # gold event mentions
+        self.gold_entity_mentions = []  # gold event mentions
         self.pred_event_mentions = []  # predicted event mentions
         self.pred_entity_mentions = []  # predicted entity mentions
 
@@ -203,9 +204,11 @@ class Sentence(object):
         else:
             self.pred_entity_mentions.append(mention)
 
-        return self.match_predicted_to_gold_mention(mention, is_event, relaxed_match)
+        return self.match_predicted_to_gold_mention(mention, is_event,
+                                                    relaxed_match)
 
-    def match_predicted_to_gold_mention(self, pred_mention, is_event, relaxed_match):
+    def match_predicted_to_gold_mention(self, pred_mention, is_event,
+                                        relaxed_match):
         '''
         This function gets a predicted mention object and try to match it with a gold mention.
         The match is based on an exact string match, head match or
@@ -231,7 +234,9 @@ class Sentence(object):
                 pred_mention.gold_end = gold_mention.end_offset
                 found = True
                 break
-            elif relaxed_match and self.same_head(pred_mention,gold_mention) and not gold_mention.has_compatible_mention: #not sure about the has_compatible_mention
+            elif relaxed_match and self.same_head(
+                    pred_mention, gold_mention
+            ) and not gold_mention.has_compatible_mention:  #not sure about the has_compatible_mention
                 pred_mention.has_compatible_mention = True
                 gold_mention.has_compatible_mention = True
                 pred_mention.gold_mention_id = gold_mention.mention_id
@@ -240,7 +245,9 @@ class Sentence(object):
                 pred_mention.gold_end = gold_mention.end_offset
                 found = True
                 break
-            elif relaxed_match and self.i_within_i(pred_mention, gold_mention) and not gold_mention.has_compatible_mention:
+            elif relaxed_match and self.i_within_i(
+                    pred_mention,
+                    gold_mention) and not gold_mention.has_compatible_mention:
                 pred_mention.has_compatible_mention = True
                 gold_mention.has_compatible_mention = True
                 pred_mention.gold_mention_id = gold_mention.mention_id
@@ -289,7 +296,7 @@ class Sentence(object):
         :return: the closest entity if it was found, and None otherwise.
         '''
         sent_entities = self.gold_entity_mentions if is_gold else self.pred_entity_mentions
-        event_start_idx =  event.start_offset
+        event_start_idx = event.start_offset
         event_end_idx = event.end_offset
 
         nearest_ent = None
@@ -315,7 +322,7 @@ class Sentence(object):
         '''
         mention_tokens = []
         tokens = []
-        for i in range(start_offset, end_offset+1):
+        for i in range(start_offset, end_offset + 1):
             mention_tokens.append(self.tokens[i].get_token())
             tokens.append(self.tokens[i])
         return ' '.join(mention_tokens), tokens
@@ -338,8 +345,9 @@ class Mention(object):
     '''
      An abstract class which represents a mention in the corpus.
     '''
-    def __init__(self, doc_id, sent_id, tokens_numbers,tokens ,mention_str, head_text, head_lemma,
-                 is_singleton, is_continuous, coref_chain):
+    def __init__(self, doc_id, sent_id, tokens_numbers, tokens, mention_str,
+                 head_text, head_lemma, is_singleton, is_continuous,
+                 coref_chain):
         '''
         A c'tor for a mention object
         :param doc_id: the document ID
@@ -356,9 +364,14 @@ class Mention(object):
         '''
         self.doc_id = doc_id  # a string
         self.sent_id = sent_id  # a string
-        self.start_offset = tokens_numbers[0] # an integer
-        self.end_offset = tokens_numbers[-1] # an integer
-        self.mention_id = '_'.join([doc_id,str(sent_id),str(self.start_offset),str(self.end_offset)])
+        self.start_offset = tokens_numbers[0]  # an integer
+        self.end_offset = tokens_numbers[-1]  # an integer
+        self.mention_id = '_'.join([
+            doc_id,
+            str(sent_id),
+            str(self.start_offset),
+            str(self.end_offset)
+        ])
         self.mention_str = mention_str
         self.mention_head = head_text
         self.mention_head_lemma = head_lemma
@@ -397,7 +410,8 @@ class Mention(object):
         :return: the token ID of the mention's head
         '''
         for token in self.tokens:
-            if token.get_token() == self.mention_head or self.mention_head in token.get_token():
+            if token.get_token(
+            ) == self.mention_head or self.mention_head in token.get_token():
                 return token.token_id
 
     def __str__(self):
@@ -405,7 +419,8 @@ class Mention(object):
 
     @classmethod
     def get_comparator_function(cls):
-        return lambda mention: (mention.doc_id, int(mention.sent_id) ,int(mention.start_offset))
+        return lambda mention: (mention.doc_id, int(mention.sent_id),
+                                int(mention.start_offset))
 
 
 class EventMention(Mention):
@@ -414,8 +429,9 @@ class EventMention(Mention):
     This class inherits the Mention class and it contains also variables for
     the mention's arguments.
     '''
-    def __init__(self, doc_id, sent_id, tokens_numbers,tokens,mention_str, head_text, head_lemma,
-                 is_singleton, is_continuous, coref_chain):
+    def __init__(self, doc_id, sent_id, tokens_numbers, tokens, mention_str,
+                 head_text, head_lemma, is_singleton, is_continuous,
+                 coref_chain):
         '''
         A c'tor for an event mention object, it sets the below parameters and initializes
         the mention's arguments
@@ -431,15 +447,21 @@ class EventMention(Mention):
         :param coref_chain: the mention's gold coreference chain
 
         '''
-        super(EventMention, self).__init__(doc_id, sent_id, tokens_numbers,tokens,mention_str, head_text, head_lemma,
-                 is_singleton, is_continuous, coref_chain)
+        super(EventMention,
+              self).__init__(doc_id, sent_id, tokens_numbers, tokens,
+                             mention_str, head_text, head_lemma, is_singleton,
+                             is_continuous, coref_chain)
         ''' The following attributes consist of a tuple contains two elements - the first is the 
         entity mention's (which plays the role) text and the second one is its mention ID  '''
 
         self.arg0 = None
+        self.arg0_range = None
         self.arg1 = None
+        self.arg1_range = None
         self.amtmp = None
+        self.amtmp_range = None
         self.amloc = None
+        self.amloc_range = None
 
     def __str__(self):
         a0 = self.arg0[0] if self.arg0 is not None else '-'
@@ -447,7 +469,9 @@ class EventMention(Mention):
         atmp = self.amtmp[0] if self.amtmp is not None else '-'
         aloc = self.amloc[0] if self.amloc is not None else '-'
 
-        return '{}_a0: {}_a1: {}_loc: {}_tmp: {}_{}'.format(super(EventMention, self).__str__(),a0, a1,aloc, atmp,self.mention_id)
+        return '{}_a0: {}_a1: {}_loc: {}_tmp: {}_{}'.format(
+            super(EventMention, self).__str__(), a0, a1, aloc, atmp,
+            self.mention_id)
 
 
 class EntityMention(Mention):
@@ -456,8 +480,9 @@ class EntityMention(Mention):
     This class inherits from the Mention class and it contains also the predicates of
     the entity mention and the entity mention type (Human/Non-human/Location/Time) .
     '''
-    def __init__(self, doc_id, sent_id, tokens_numbers,tokens,mention_str, head_text, head_lemma,
-                 is_singleton, is_continuous, coref_chain, mention_type):
+    def __init__(self, doc_id, sent_id, tokens_numbers, tokens, mention_str,
+                 head_text, head_lemma, is_singleton, is_continuous,
+                 coref_chain, mention_type):
         '''
         A c'tor for an entity mention object, it sets the below parameters and sets an "empty" predicate
         :param doc_id: the document ID
@@ -473,13 +498,17 @@ class EntityMention(Mention):
         :param mention_type: the entity mention type - Human/Non-human/Location/Time(string)
 
         '''
-        super(EntityMention, self).__init__(doc_id, sent_id, tokens_numbers, tokens,
-                                            mention_str, head_text, head_lemma, is_singleton,
-                                            is_continuous, coref_chain)
-        self.predicates = {}  # a dictionary contains the entity mention's predicates, key is a predicate's mention id and value is the argument name
+        super(EntityMention,
+              self).__init__(doc_id, sent_id, tokens_numbers, tokens,
+                             mention_str, head_text, head_lemma, is_singleton,
+                             is_continuous, coref_chain)
+        self.predicates = {
+        }  # a dictionary contains the entity mention's predicates, key is a predicate's mention id and value is the argument name
+        self.predicate_ranges = {}
         self.mention_type = mention_type
 
-    def add_predicate(self, predicate_id, relation_to_predicate):
+    def add_predicate(self, predicate_id, relation_to_predicate,
+                      predicate_range):
         '''
         Adds an event mention to the predicates dictionary
         :param predicate_id: the mention id of the event mention
@@ -487,6 +516,7 @@ class EntityMention(Mention):
          entity mention plays for that predicate (aka event mention) - Arg0/Arg1/Location/Time
         '''
         self.predicates[predicate_id] = relation_to_predicate
+        self.predicate_ranges[predicate_id] = predicate_range
 
     def __str__(self):
         a0_pred = '-'
@@ -495,13 +525,13 @@ class EntityMention(Mention):
         atmp_pred = '-'
         for pred, rel in self.predicates.items():
             if rel == 'A0':
-                a0_pred += pred[0]+'-'
+                a0_pred += pred[0] + '-'
             elif rel == 'A1':
-                a1_pred += pred[0]+'-'
+                a1_pred += pred[0] + '-'
             elif rel == 'AM-TMP':
-                atmp_pred += pred[0]+'-'
+                atmp_pred += pred[0] + '-'
             elif rel == 'AM-LOC':
-                aloc_pred += pred[0]+'-'
+                aloc_pred += pred[0] + '-'
 
         return '{}_a0-pred: {}_a1-pred: {}_loc-pred: {}_tmp-pred:' \
                ' {}_{}'.format(super(EntityMention, self).__str__(), a0_pred,
@@ -513,7 +543,7 @@ class Token(object):
     A class represents a token in a sentence and contains the token ID
      (its ordinal number in the sentence), the token's string, its coreference gold chain and its predicted coreference chains
     '''
-    def __init__(self, token_id,token,gold_coref_chain):
+    def __init__(self, token_id, token, gold_coref_chain):
         '''
         A c'tor for a mention object, it sets the below parameters
         :param token_id: the token ID (its ordinal number in the sentence)
@@ -546,7 +576,7 @@ class Srl_info(object):
         :param predicate:
         '''
         self.sent_id = sent_id
-        self.arg_info = arg_info # a dictionary contains the predicate's arguments, key is an argument name and value is a list argument tokens
+        self.arg_info = arg_info  # a dictionary contains the predicate's arguments, key is an argument name and value is a list argument tokens
         self.tok_id = tok_id
         self.predicate = predicate
 
@@ -558,7 +588,8 @@ class Srl_info(object):
         return self.arg_info
 
     def __str__(self):
-        return 'sent_id {}  tok_id {} predicate {}'.format(self.sent_id, self.tok_id, self.predicate)
+        return 'sent_id {}  tok_id {} predicate {}'.format(
+            self.sent_id, self.tok_id, self.predicate)
 
 
 class Cluster(object):
@@ -567,7 +598,8 @@ class Cluster(object):
     '''
     def __init__(self, is_event):
         self.cluster_id = 0
-        self.mentions = {}  # mention's dictionary, key is a mention id and value is a Mention object (either event or entity)
+        self.mentions = {
+        }  # mention's dictionary, key is a mention id and value is a Mention object (either event or entity)
         self.is_event = is_event
         self.merged = False
         self.lex_vec = None
@@ -580,14 +612,16 @@ class Cluster(object):
         mentions_strings = []
         for mention in self.mentions.values():
             mentions_strings.append('{}_{}_{}'.format(mention.mention_str,
-                                                      mention.gold_tag, mention.mention_id))
+                                                      mention.gold_tag,
+                                                      mention.mention_id))
         return str(mentions_strings)
 
     def __str__(self):
         mentions_strings = []
         for mention in self.mentions.values():
             mentions_strings.append('{}_{}_{}'.format(mention.mention_str,
-                                                      mention.gold_tag, mention.mention_id))
+                                                      mention.gold_tag,
+                                                      mention.mention_id))
         return str(mentions_strings)
 
     def get_mentions_str_list(self):
@@ -599,6 +633,3 @@ class Cluster(object):
         for mention in self.mentions.values():
             mentions_strings.append(mention.mention_str)
         return mentions_strings
-
-
-
