@@ -1229,11 +1229,11 @@ def get_event_arg_embeds(mention, topic_docs):
         i for i in range(tokenization_mapping[mention.start_offset][0],
                          tokenization_mapping[mention.end_offset][-1] + 1)
     ]
-    mention_embed = torch.zeros((10, embeddings.shape[-1]))
+    mention_embed = torch.zeros((15, embeddings.shape[-1]))
     mention_embed_src = embeddings[mention_range, :]
     mention_embed[:mention_embed_src.shape[0], :] = mention_embed_src
 
-    arg0_embed = torch.zeros((10, embeddings.shape[-1]))
+    arg0_embed = torch.zeros((15, embeddings.shape[-1]))
     if mention.arg0_range:
         arg0_range = [
             i
@@ -1242,7 +1242,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         arg0_embed_src = embeddings[arg0_range, :]
         arg0_embed[:arg0_embed_src.shape[0], :] = arg0_embed_src
-    arg1_embed = torch.zeros((10, embeddings.shape[-1]))
+    arg1_embed = torch.zeros((15, embeddings.shape[-1]))
     if mention.arg1_range:
         arg1_range = [
             i
@@ -1251,7 +1251,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         arg1_embed_src = embeddings[arg1_range, :]
         arg1_embed[:arg1_embed_src.shape[0], :] = arg1_embed_src
-    loc_embed = torch.zeros((10, embeddings.shape[-1]))
+    loc_embed = torch.zeros((15, embeddings.shape[-1]))
     if mention.amloc_range:
         loc_range = [
             i for i in range(
@@ -1260,7 +1260,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         loc_embed_src = embeddings[loc_range, :]
         loc_embed[:loc_embed_src.shape[0], :] = loc_embed_src
-    tmp_embed = torch.zeros((10, embeddings.shape[-1]))
+    tmp_embed = torch.zeros((15, embeddings.shape[-1]))
     if mention.amtmp_range:
         tmp_range = [
             i for i in range(
@@ -1299,12 +1299,12 @@ def get_entity_arg_embeds(mention, topic_docs):
         i for i in range(tokenization_mapping[mention.start_offset][0],
                          tokenization_mapping[mention.end_offset][-1] + 1)
     ]
-    mention_embed = torch.zeros((10, embeddings.shape[-1]))
+    mention_embed = torch.zeros((15, embeddings.shape[-1]))
     mention_embed_src = embeddings[mention_range, :]
     mention_embed[:mention_embed_src.shape[0], :] = mention_embed_src
     arg0_range_orig, arg1_range_orig, loc_range_orig, tmp_range_orig = get_entity_pred_ranges(
         mention)
-    arg0_embed = torch.zeros((10, embeddings.shape[-1]))
+    arg0_embed = torch.zeros((15, embeddings.shape[-1]))
     if arg0_range_orig:
         arg0_range = [
             i for i in range(tokenization_mapping[arg0_range_orig[0]][0],
@@ -1312,7 +1312,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         arg0_embed_src = embeddings[arg0_range, :]
         arg0_embed[:arg0_embed_src.shape[0], :] = arg0_embed_src
-    arg1_embed = torch.zeros((10, embeddings.shape[-1]))
+    arg1_embed = torch.zeros((15, embeddings.shape[-1]))
     if arg1_range_orig:
         arg1_range = [
             i for i in range(tokenization_mapping[arg1_range_orig[0]][0],
@@ -1320,7 +1320,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         arg1_embed_src = embeddings[arg1_range, :]
         arg1_embed[:arg1_embed_src.shape[0], :] = arg1_embed_src
-    loc_embed = torch.zeros((10, embeddings.shape[-1]))
+    loc_embed = torch.zeros((15, embeddings.shape[-1]))
     if loc_range_orig:
         loc_range = [
             i for i in range(tokenization_mapping[loc_range_orig[0]][0],
@@ -1328,7 +1328,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         loc_embed_src = embeddings[loc_range, :]
         loc_embed[:loc_embed_src.shape[0], :] = loc_embed_src
-    tmp_embed = torch.zeros((10, embeddings.shape[-1]))
+    tmp_embed = torch.zeros((15, embeddings.shape[-1]))
     if tmp_range_orig:
         tmp_range = [
             i for i in range(tokenization_mapping[tmp_range_orig[0]][0],

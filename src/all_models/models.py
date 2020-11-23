@@ -12,6 +12,7 @@ class TransformerCorefScorer(nn.Module):
         from torch.nn import TransformerEncoder, TransformerEncoderLayer
         self.model_type = 'Transformer'
         encoder_layers = TransformerEncoderLayer(ninp, nhead, nhid, dropout)
+        self.max_len = 15
         self.arg2_embedding = nn.Linear(ninp, ninp, bias=False)
         self.arg1_embedding = nn.Linear(ninp, ninp, bias=False)
         self.loc_embedding = nn.Linear(ninp, ninp, bias=False)
@@ -52,7 +53,7 @@ class TransformerCorefScorer(nn.Module):
         src = torch.cat([src_1, seps, src_2], dim=1)
         src = src * math.sqrt(self.ninp)
         output = self.transformer_encoder(src)
-        sep_store = output[:, 50, :]
+        sep_store = output[:, (self.max_len * 5), :]
         first_hidden = F.relu(self.hidden_layer_1(sep_store))
         second_hidden = F.relu(self.hidden_layer_2(first_hidden))
         out = F.sigmoid(self.out_layer(second_hidden))
