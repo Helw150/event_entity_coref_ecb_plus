@@ -12,13 +12,17 @@ class TransformerCorefScorer(nn.Module):
         from torch.nn import TransformerEncoder, TransformerEncoderLayer
         self.model_type = 'Transformer'
         encoder_layers = TransformerEncoderLayer(ninp, nhead, nhid, dropout)
-        self.max_len = 15
+        self.device = device
+        self.max_len = 30
+        self.nhid = nhid
         self.arg2_embedding = nn.Linear(ninp, ninp, bias=False)
         self.arg1_embedding = nn.Linear(ninp, ninp, bias=False)
         self.loc_embedding = nn.Linear(ninp, ninp, bias=False)
         self.tmp_embedding = nn.Linear(ninp, ninp, bias=False)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
         self.seperator = nn.Parameter(torch.rand(nhid).view(1, 1, -1))
+        self.seq_1 = nn.Parameter(torch.rand(nhid).view(1, 1, -1))
+        self.seq_2 = nn.Parameter(torch.rand(nhid).view(1, 1, -1))
         self.hidden_dim_1 = int(nhid / 2)
         self.hidden_dim_2 = int(nhid / 2)
         self.hidden_layer_1 = nn.Linear(nhid, self.hidden_dim_1)
@@ -32,28 +36,48 @@ class TransformerCorefScorer(nn.Module):
             mask == 1, float(0.0))
         return mask
 
+    def _transform_and_pack(self, mention, arg1, arg2, loc, tmp):
+        arg1 = self.arg1_embedding(arg1)
+        arg2 = self.arg2_embedding(arg2)
+        loc = self.loc_embedding(loc)
+        tmp = self.tmp_embedding(tmp)
+        src = torch.cat([arg1, mention, arg2, loc, tmp], dim=1)
+        _, re_order_index = ((src == 0).sum(2) == 0).type(torch.IntTensor).to(
+            self.device).sort(1, descending=True)
+        gather_map = re_order_index.view(-1, (self.max_len * 5),
+                                         1).expand(-1, -1, self.nhid)
+        src = torch.gather(src, 1, gather_map)
+        return src
+
+    def _pack_final(self, final_tensor):
+        _, reorder_index = ((final_tensor == 0).sum(2) == 0).type(
+            torch.IntTensor).to(self.device).sort(1, descending=True)
+        gather_map = reorder_index.view(-1, (self.max_len * 10) + 1,
+                                        1).expand(-1, -1, self.nhid)
+        final_tensor = torch.gather(final_tensor, 1, gather_map)
+        map_to_seperators = (reorder_index == (
+            5 * self.max_len)).nonzero()[:, 1].view(-1, 1, 1).expand(
+                -1, -1, self.nhid)
+        return final_tensor, map_to_seperators
+
     def forward(self, src_mention_1, src_arg1_1, src_arg2_1, src_loc_1,
                 src_tmp_1, src_mention_2, src_arg1_2, src_arg2_2, src_loc_2,
                 src_tmp_2):
-        src_arg1_1 = self.arg1_embedding(src_arg1_1)
-        src_arg2_1 = self.arg2_embedding(src_arg2_1)
-        src_loc_1 = self.loc_embedding(src_loc_1)
-        src_tmp_1 = self.tmp_embedding(src_tmp_1)
-        src_1 = torch.cat(
-            [src_arg1_1, src_mention_1, src_arg2_1, src_loc_1, src_tmp_1],
-            dim=1)
-        src_arg1_2 = self.arg1_embedding(src_arg1_2)
-        src_arg2_2 = self.arg2_embedding(src_arg2_2)
-        src_loc_2 = self.loc_embedding(src_loc_2)
-        src_tmp_2 = self.tmp_embedding(src_tmp_2)
-        src_2 = torch.cat(
-            [src_arg1_2, src_mention_2, src_arg2_2, src_loc_2, src_tmp_2],
-            dim=1)
+
+        src_1 = self._transform_and_pack(src_mention_1, src_arg1_1, src_arg2_1,
+                                         src_loc_1, src_tmp_1) + self.seq_1
+
+        src_2 = self._transform_and_pack(src_mention_2, src_arg1_2, src_arg2_2,
+                                         src_loc_2, src_tmp_2) + self.seq_2
+
         seps = torch.cat(src_1.shape[0] * [self.seperator])
         src = torch.cat([src_1, seps, src_2], dim=1)
-        src = src * math.sqrt(self.ninp)
+        src, map_to_seperators = self._pack_final(src)
+        max_seq_in_batch = ((src == 0).sum(2) == 0).sum(1).max().detach()
+        src = src[:, :max_seq_in_batch, :]
         output = self.transformer_encoder(src)
-        sep_store = output[:, (self.max_len * 5), :]
+        sep_store = output.gather(1, map_to_seperators)
+        sep_store = sep_store.view(-1, 768)
         first_hidden = F.relu(self.hidden_layer_1(sep_store))
         second_hidden = F.relu(self.hidden_layer_2(first_hidden))
         out = F.sigmoid(self.out_layer(second_hidden))

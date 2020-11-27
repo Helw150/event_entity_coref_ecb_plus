@@ -1229,11 +1229,12 @@ def get_event_arg_embeds(mention, topic_docs):
         i for i in range(tokenization_mapping[mention.start_offset][0],
                          tokenization_mapping[mention.end_offset][-1] + 1)
     ]
-    mention_embed = torch.zeros((15, embeddings.shape[-1]))
+    max_len = 20
+    mention_embed = torch.zeros((max_len, embeddings.shape[-1]))
     mention_embed_src = embeddings[mention_range, :]
     mention_embed[:mention_embed_src.shape[0], :] = mention_embed_src
 
-    arg0_embed = torch.zeros((15, embeddings.shape[-1]))
+    arg0_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.arg0_range:
         arg0_range = [
             i
@@ -1242,7 +1243,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         arg0_embed_src = embeddings[arg0_range, :]
         arg0_embed[:arg0_embed_src.shape[0], :] = arg0_embed_src
-    arg1_embed = torch.zeros((15, embeddings.shape[-1]))
+    arg1_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.arg1_range:
         arg1_range = [
             i
@@ -1251,7 +1252,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         arg1_embed_src = embeddings[arg1_range, :]
         arg1_embed[:arg1_embed_src.shape[0], :] = arg1_embed_src
-    loc_embed = torch.zeros((15, embeddings.shape[-1]))
+    loc_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.amloc_range:
         loc_range = [
             i for i in range(
@@ -1260,7 +1261,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         loc_embed_src = embeddings[loc_range, :]
         loc_embed[:loc_embed_src.shape[0], :] = loc_embed_src
-    tmp_embed = torch.zeros((15, embeddings.shape[-1]))
+    tmp_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.amtmp_range:
         tmp_range = [
             i for i in range(
@@ -1299,12 +1300,13 @@ def get_entity_arg_embeds(mention, topic_docs):
         i for i in range(tokenization_mapping[mention.start_offset][0],
                          tokenization_mapping[mention.end_offset][-1] + 1)
     ]
-    mention_embed = torch.zeros((15, embeddings.shape[-1]))
+    max_len = 30
+    mention_embed = torch.zeros((max_len, embeddings.shape[-1]))
     mention_embed_src = embeddings[mention_range, :]
     mention_embed[:mention_embed_src.shape[0], :] = mention_embed_src
     arg0_range_orig, arg1_range_orig, loc_range_orig, tmp_range_orig = get_entity_pred_ranges(
         mention)
-    arg0_embed = torch.zeros((15, embeddings.shape[-1]))
+    arg0_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if arg0_range_orig:
         arg0_range = [
             i for i in range(tokenization_mapping[arg0_range_orig[0]][0],
@@ -1312,7 +1314,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         arg0_embed_src = embeddings[arg0_range, :]
         arg0_embed[:arg0_embed_src.shape[0], :] = arg0_embed_src
-    arg1_embed = torch.zeros((15, embeddings.shape[-1]))
+    arg1_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if arg1_range_orig:
         arg1_range = [
             i for i in range(tokenization_mapping[arg1_range_orig[0]][0],
@@ -1320,7 +1322,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         arg1_embed_src = embeddings[arg1_range, :]
         arg1_embed[:arg1_embed_src.shape[0], :] = arg1_embed_src
-    loc_embed = torch.zeros((15, embeddings.shape[-1]))
+    loc_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if loc_range_orig:
         loc_range = [
             i for i in range(tokenization_mapping[loc_range_orig[0]][0],
@@ -1328,7 +1330,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         loc_embed_src = embeddings[loc_range, :]
         loc_embed[:loc_embed_src.shape[0], :] = loc_embed_src
-    tmp_embed = torch.zeros((15, embeddings.shape[-1]))
+    tmp_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if tmp_range_orig:
         tmp_range = [
             i for i in range(tokenization_mapping[tmp_range_orig[0]][0],
@@ -1741,23 +1743,24 @@ def merge_clusters(pair_to_merge,
     clusters.remove(cluster_i)
     clusters.remove(cluster_j)
     clusters.append(new_cluster)
-
-    if is_event:
-        lex_vec = create_event_cluster_bow_lexical_vec(new_cluster,
-                                                       model,
-                                                       device,
-                                                       use_char_embeds=True,
-                                                       requires_grad=False)
-    else:
-        lex_vec = create_entity_cluster_bow_lexical_vec(new_cluster,
-                                                        model,
-                                                        device,
-                                                        use_char_embeds=True,
-                                                        requires_grad=False)
-
-    new_cluster.lex_vec = lex_vec
-
     if not config_dict["use_transformer"]:
+        if is_event:
+            lex_vec = create_event_cluster_bow_lexical_vec(
+                new_cluster,
+                model,
+                device,
+                use_char_embeds=True,
+                requires_grad=False)
+        else:
+            lex_vec = create_entity_cluster_bow_lexical_vec(
+                new_cluster,
+                model,
+                device,
+                use_char_embeds=True,
+                requires_grad=False)
+
+        new_cluster.lex_vec = lex_vec
+
         # create arguments features for the new cluster
         update_args_feature_vectors([new_cluster], other_clusters, model,
                                     device, is_event)
@@ -2022,19 +2025,20 @@ def test_models(test_set, cd_event_model, cd_entity_model, device, config_dict,
             all_event_mentions.extend(event_mentions)
             all_entity_mentions.extend(entity_mentions)
 
-            # create span rep for both entity and event mentions
-            create_mention_span_representations(event_mentions,
-                                                cd_event_model,
-                                                device,
-                                                topic.docs,
-                                                is_event=True,
-                                                requires_grad=False)
-            create_mention_span_representations(entity_mentions,
-                                                cd_entity_model,
-                                                device,
-                                                topic.docs,
-                                                is_event=False,
-                                                requires_grad=False)
+            if not config_dict["use_transformer"]:
+                # create span rep for both entity and event mentions
+                create_mention_span_representations(event_mentions,
+                                                    cd_event_model,
+                                                    device,
+                                                    topic.docs,
+                                                    is_event=True,
+                                                    requires_grad=False)
+                create_mention_span_representations(entity_mentions,
+                                                    cd_entity_model,
+                                                    device,
+                                                    topic.docs,
+                                                    is_event=False,
+                                                    requires_grad=False)
 
             print('number of event mentions : {}'.format(len(event_mentions)))
             print('number of entity mentions : {}'.format(

@@ -1,5 +1,5 @@
 {
-    "batch_size": 128,
+    "batch_size": 256,
     "char_pretrained_path": "data/external/char_embed/glove.840B.300d-char.npy",
     "char_rep_size": 50,
     "char_vocab_path": "data/external/char_embed/glove.840B.300d-char.vocab",
@@ -7,7 +7,7 @@
     "dev_th_range": [0.5, 0.6],
 
     "entity_merge_threshold": 0.5,
-    "epochs": 50,
+    "epochs": 100,
     "event_merge_threshold": 0.5,
     "feature_size": 50,
     "glove_path": "data/external/glove.6B.300d.txt",
@@ -16,12 +16,12 @@
     "load_predicted_topics": false,
     "log_interval": 32,
     "loss": "bce",
-    "lr": 0.001,
+    "lr": 0.005,
     "merge_iters": 2,
     "momentum": 0,
 
-    "optimizer": "adam",
-    "patient": 7,
+    "optimizer": "adamw",
+    "patient": 20,
     "random_seed": 2048,
     "regressor_epochs": 1,
     "remove_singletons": false,

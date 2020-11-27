@@ -97,6 +97,10 @@ def create_optimizer(config_dict, model):
         optimizer = optim.Adam(parameters,
                                lr=lr,
                                weight_decay=config_dict["weight_decay"])
+    elif config_dict["optimizer"] == 'adamw':
+        optimizer = optim.AdamW(parameters,
+                                lr=lr,
+                                weight_decay=config_dict["weight_decay"])
     elif config_dict["optimizer"] == 'sgd':
         optimizer = optim.SGD(parameters,
                               lr=lr,
