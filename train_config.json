@@ -1,5 +1,5 @@
 {
-    "batch_size": 256,
+    "batch_size": 32,
     "char_pretrained_path": "data/external/char_embed/glove.840B.300d-char.npy",
     "char_rep_size": 50,
     "char_vocab_path": "data/external/char_embed/glove.840B.300d-char.vocab",
@@ -16,8 +16,8 @@
     "load_predicted_topics": false,
     "log_interval": 32,
     "loss": "bce",
-    "lr": 0.005,
-    "merge_iters": 2,
+    "lr": 0.0001,
+    "merge_iters": 100,
     "momentum": 0,
 
     "optimizer": "adamw",

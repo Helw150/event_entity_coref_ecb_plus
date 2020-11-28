@@ -70,7 +70,7 @@ class TransformerCorefScorer(nn.Module):
         src_2 = self._transform_and_pack(src_mention_2, src_arg1_2, src_arg2_2,
                                          src_loc_2, src_tmp_2) + self.seq_2
 
-        seps = torch.cat(src_1.shape[0] * [self.seperator])
+        seps = self.seperator.repeat(src_1.shape[0], 1, 1)
         src = torch.cat([src_1, seps, src_2], dim=1)
         src, map_to_seperators = self._pack_final(src)
         max_seq_in_batch = ((src == 0).sum(2) == 0).sum(1).max().detach()
