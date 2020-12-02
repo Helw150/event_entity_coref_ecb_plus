@@ -1229,10 +1229,12 @@ def get_event_arg_embeds(mention, topic_docs):
         i for i in range(tokenization_mapping[mention.start_offset][0],
                          tokenization_mapping[mention.end_offset][-1] + 1)
     ]
-    max_len = 20
+    max_len = 30
     mention_embed = torch.zeros((max_len, embeddings.shape[-1]))
     mention_embed_src = embeddings[mention_range, :]
     mention_embed[:mention_embed_src.shape[0], :] = mention_embed_src
+
+    component_length = len(mention_range)
 
     arg0_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.arg0_range:
@@ -1243,6 +1245,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         arg0_embed_src = embeddings[arg0_range, :]
         arg0_embed[:arg0_embed_src.shape[0], :] = arg0_embed_src
+        component_length += len(arg0_range)
     arg1_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.arg1_range:
         arg1_range = [
@@ -1252,6 +1255,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         arg1_embed_src = embeddings[arg1_range, :]
         arg1_embed[:arg1_embed_src.shape[0], :] = arg1_embed_src
+        component_length += len(arg1_range)
     loc_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.amloc_range:
         loc_range = [
@@ -1261,6 +1265,7 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         loc_embed_src = embeddings[loc_range, :]
         loc_embed[:loc_embed_src.shape[0], :] = loc_embed_src
+        component_length += len(loc_range)
     tmp_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if mention.amtmp_range:
         tmp_range = [
@@ -1270,8 +1275,9 @@ def get_event_arg_embeds(mention, topic_docs):
         ]
         tmp_embed_src = embeddings[tmp_range, :]
         tmp_embed[:tmp_embed_src.shape[0], :] = tmp_embed_src
+        component_length += len(tmp_range)
 
-    return mention_embed, arg0_embed, arg1_embed, loc_embed, tmp_embed
+    return mention_embed, arg0_embed, arg1_embed, loc_embed, tmp_embed, component_length
 
 
 def get_entity_pred_ranges(mention):
@@ -1303,6 +1309,7 @@ def get_entity_arg_embeds(mention, topic_docs):
     max_len = 30
     mention_embed = torch.zeros((max_len, embeddings.shape[-1]))
     mention_embed_src = embeddings[mention_range, :]
+    component_length = len(mention_range)
     mention_embed[:mention_embed_src.shape[0], :] = mention_embed_src
     arg0_range_orig, arg1_range_orig, loc_range_orig, tmp_range_orig = get_entity_pred_ranges(
         mention)
@@ -1314,6 +1321,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         arg0_embed_src = embeddings[arg0_range, :]
         arg0_embed[:arg0_embed_src.shape[0], :] = arg0_embed_src
+        component_length += len(arg0_range)
     arg1_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if arg1_range_orig:
         arg1_range = [
@@ -1322,6 +1330,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         arg1_embed_src = embeddings[arg1_range, :]
         arg1_embed[:arg1_embed_src.shape[0], :] = arg1_embed_src
+        component_length += len(arg1_range)
     loc_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if loc_range_orig:
         loc_range = [
@@ -1330,6 +1339,7 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         loc_embed_src = embeddings[loc_range, :]
         loc_embed[:loc_embed_src.shape[0], :] = loc_embed_src
+        component_length += len(loc_range)
     tmp_embed = torch.zeros((max_len, embeddings.shape[-1]))
     if tmp_range_orig:
         tmp_range = [
@@ -1338,23 +1348,24 @@ def get_entity_arg_embeds(mention, topic_docs):
         ]
         tmp_embed_src = embeddings[tmp_range, :]
         tmp_embed[:tmp_embed_src.shape[0], :] = tmp_embed_src
-
-    return mention_embed, arg0_embed, arg1_embed, loc_embed, tmp_embed
+        component_length += len(tmp_range)
+    return mention_embed, arg0_embed, arg1_embed, loc_embed, tmp_embed, component_length
 
 
 def mention_pair_to_transformer_input(mention_1, mention_2, topic_docs,
                                       is_event):
     if is_event:
-        mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1 = get_event_arg_embeds(
+        mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, length_1 = get_event_arg_embeds(
             mention_1, topic_docs)
-        mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2 = get_event_arg_embeds(
+        mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2, length_2 = get_event_arg_embeds(
             mention_2, topic_docs)
     else:
-        mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1 = get_entity_arg_embeds(
+        mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, length_1 = get_entity_arg_embeds(
             mention_1, topic_docs)
-        mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2 = get_entity_arg_embeds(
+        mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2, length_2 = get_entity_arg_embeds(
             mention_2, topic_docs)
-    return mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2
+    return mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2, torch.tensor(
+        length_1), torch.tensor(length_2)
 
 
 def train_pairs_batch_to_model_input(batch_pairs,
@@ -1386,8 +1397,8 @@ def train_pairs_batch_to_model_input(batch_pairs,
     according to the batch size, q_pairs_tensor - a tensor of the pairs' gold labels
     '''
     if config_dict["use_transformer"]:
-        mention_embeds_1_list, arg0_embeds_1_list, arg1_embeds_1_list, loc_embeds_1_list, tmp_embeds_1_list, mention_embeds_2_list, arg0_embeds_2_list, arg1_embeds_2_list, loc_embeds_2_list, tmp_embeds_2_list = (
-            [] for i in range(10))
+        mention_embeds_1_list, arg0_embeds_1_list, arg1_embeds_1_list, loc_embeds_1_list, tmp_embeds_1_list, mention_embeds_2_list, arg0_embeds_2_list, arg1_embeds_2_list, loc_embeds_2_list, tmp_embeds_2_list, length_1_list, length_2_list = (
+            [] for i in range(12))
     else:
         tensors_list = []
     q_list = []
@@ -1395,7 +1406,7 @@ def train_pairs_batch_to_model_input(batch_pairs,
         mention_1 = pair[0]
         mention_2 = pair[1]
         if config_dict["use_transformer"]:
-            mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2 = mention_pair_to_transformer_input(
+            mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2, length_1, length_2 = mention_pair_to_transformer_input(
                 mention_1, mention_2, topic_docs, is_event)
             mention_embeds_1_list.append(mention_embeds_1)
             arg0_embeds_1_list.append(arg0_embeds_1)
@@ -1407,6 +1418,8 @@ def train_pairs_batch_to_model_input(batch_pairs,
             arg1_embeds_2_list.append(arg1_embeds_2)
             loc_embeds_2_list.append(loc_embeds_2)
             tmp_embeds_2_list.append(tmp_embeds_2)
+            length_1_list.append(length_1)
+            length_2_list.append(length_2)
         else:
             mention_pair_tensor = mention_pair_to_model_input(
                 pair,
@@ -1431,26 +1444,20 @@ def train_pairs_batch_to_model_input(batch_pairs,
     q_pairs_tensor = torch.cat(q_list, 0)
 
     if config_dict["use_transformer"]:
-        batch_pairs_tensors = (torch.stack(mention_embeds_1_list,
-                                           dim=0).to(device),
-                               torch.stack(arg0_embeds_1_list,
-                                           dim=0).to(device),
-                               torch.stack(arg1_embeds_1_list,
-                                           dim=0).to(device),
-                               torch.stack(loc_embeds_1_list,
-                                           dim=0).to(device),
-                               torch.stack(tmp_embeds_1_list,
-                                           dim=0).to(device),
-                               torch.stack(mention_embeds_2_list,
-                                           dim=0).to(device),
-                               torch.stack(arg0_embeds_2_list,
-                                           dim=0).to(device),
-                               torch.stack(arg1_embeds_2_list,
-                                           dim=0).to(device),
-                               torch.stack(loc_embeds_2_list,
-                                           dim=0).to(device),
-                               torch.stack(tmp_embeds_2_list,
-                                           dim=0).to(device))
+        batch_pairs_tensors = (
+            torch.stack(mention_embeds_1_list, dim=0).to(device),
+            torch.stack(arg0_embeds_1_list, dim=0).to(device),
+            torch.stack(arg1_embeds_1_list, dim=0).to(device),
+            torch.stack(loc_embeds_1_list, dim=0).to(device),
+            torch.stack(tmp_embeds_1_list, dim=0).to(device),
+            torch.stack(mention_embeds_2_list, dim=0).to(device),
+            torch.stack(arg0_embeds_2_list, dim=0).to(device),
+            torch.stack(arg1_embeds_2_list, dim=0).to(device),
+            torch.stack(loc_embeds_2_list, dim=0).to(device),
+            torch.stack(tmp_embeds_2_list, dim=0).to(device),
+            torch.stack(length_1_list, dim=0).to(device),
+            torch.stack(length_1_list, dim=0).to(device),
+        )
         return batch_pairs_tensors, q_pairs_tensor
     else:
         batch_pairs_tensor = torch.cat(tensors_list, 0)
@@ -1525,12 +1532,15 @@ def train(cluster_pairs, model, optimizer, loss_function, device, topic_docs,
             total_loss += loss.item()
 
             if samples_count % config_dict["log_interval"] == 0:
-                print('epoch {}, topic {}/{} - {} model '
-                      ' [{}/{} ({:.0f}%)]  Loss: {:.6f}'.format(
-                          epoch,
-                          topics_counter, topics_num, mode, samples_count,
-                          len(pairs), 100. * samples_count / len(pairs),
-                          (total_loss / float(batches_count))))
+                accuracy = (torch.round(output) == q_tensor).sum() / batch_size
+                print(
+                    'epoch {}, topic {}/{} - {} model '
+                    ' [{}/{} ({:.0f}%)]  Avg. Loss: {:.6f} Batch Loss: {:.6f} Batch Accuracy: {:.6f}'
+                    .format(epoch,
+                            topics_counter, topics_num, mode, samples_count,
+                            len(pairs), 100. * samples_count / len(pairs),
+                            (total_loss / float(batches_count)), loss.item(),
+                            accuracy.item()))
 
             del batch_tensor, q_tensor
 
@@ -1605,12 +1615,12 @@ def test_pairs_batch_to_model_input(batch_pairs,
 
     '''
 
-    mention_embeds_1_list, arg0_embeds_1_list, arg1_embeds_1_list, loc_embeds_1_list, tmp_embeds_1_list, mention_embeds_2_list, arg0_embeds_2_list, arg1_embeds_2_list, loc_embeds_2_list, tmp_embeds_2_list = (
-        [] for i in range(10))
+    mention_embeds_1_list, arg0_embeds_1_list, arg1_embeds_1_list, loc_embeds_1_list, tmp_embeds_1_list, mention_embeds_2_list, arg0_embeds_2_list, arg1_embeds_2_list, loc_embeds_2_list, tmp_embeds_2_list, length_1_list, length_2_list = (
+        [] for i in range(12))
     tensors_list = []
     for pair in batch_pairs:
         if config_dict["use_transformer"]:
-            mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2 = mention_pair_to_transformer_input(
+            mention_embeds_1, arg0_embeds_1, arg1_embeds_1, loc_embeds_1, tmp_embeds_1, mention_embeds_2, arg0_embeds_2, arg1_embeds_2, loc_embeds_2, tmp_embeds_2, length_1, length_2 = mention_pair_to_transformer_input(
                 pair[0], pair[1], topic_docs, is_event)
             mention_embeds_1_list.append(mention_embeds_1)
             arg0_embeds_1_list.append(arg0_embeds_1)
@@ -1622,6 +1632,8 @@ def test_pairs_batch_to_model_input(batch_pairs,
             arg1_embeds_2_list.append(arg1_embeds_2)
             loc_embeds_2_list.append(loc_embeds_2)
             tmp_embeds_2_list.append(tmp_embeds_2)
+            length_1_list.append(length_1)
+            length_2_list.append(length_2)
         else:
             mention_pair_tensor = mention_pair_to_model_input(
                 pair,
@@ -1653,6 +1665,10 @@ def test_pairs_batch_to_model_input(batch_pairs,
                                    torch.stack(arg1_embeds_2_list,
                                                dim=0).to(device),
                                    torch.stack(loc_embeds_2_list,
+                                               dim=0).to(device),
+                                   torch.stack(tmp_embeds_2_list,
+                                               dim=0).to(device),
+                                   torch.stack(tmp_embeds_2_list,
                                                dim=0).to(device),
                                    torch.stack(tmp_embeds_2_list,
                                                dim=0).to(device))

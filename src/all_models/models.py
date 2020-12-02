@@ -7,7 +7,7 @@ import torch.autograd as autograd
 
 
 class TransformerCorefScorer(nn.Module):
-    def __init__(self, ninp, nhead, nhid, nlayers, device, dropout=0.5):
+    def __init__(self, ninp, nhead, nhid, nlayers, device, dropout=0.1):
         super(TransformerCorefScorer, self).__init__()
         from torch.nn import TransformerEncoder, TransformerEncoderLayer
         self.model_type = 'Transformer'
@@ -15,16 +15,27 @@ class TransformerCorefScorer(nn.Module):
         self.device = device
         self.max_len = 30
         self.nhid = nhid
+        self.padding_mask_helper = torch.arange((self.max_len * 10) +
+                                                1)[None, :].to(self.device)
         self.arg2_embedding = nn.Linear(ninp, ninp, bias=False)
         self.arg1_embedding = nn.Linear(ninp, ninp, bias=False)
         self.loc_embedding = nn.Linear(ninp, ninp, bias=False)
         self.tmp_embedding = nn.Linear(ninp, ninp, bias=False)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
-        self.seperator = nn.Parameter(torch.rand(nhid).view(1, 1, -1))
-        self.seq_1 = nn.Parameter(torch.rand(nhid).view(1, 1, -1))
-        self.seq_2 = nn.Parameter(torch.rand(nhid).view(1, 1, -1))
-        self.hidden_dim_1 = int(nhid / 2)
-        self.hidden_dim_2 = int(nhid / 2)
+        self.seperator = nn.Parameter(
+            torch.nn.init.normal_(torch.zeros(nhid).view(1, 1, -1),
+                                  mean=0.0,
+                                  std=0.001))
+        self.seq_1 = nn.Parameter(
+            torch.nn.init.normal_(torch.zeros(nhid).view(1, 1, -1),
+                                  mean=0.0,
+                                  std=0.001))
+        self.seq_2 = nn.Parameter(
+            torch.nn.init.normal_(torch.zeros(nhid).view(1, 1, -1),
+                                  mean=0.0,
+                                  std=0.001))
+        self.hidden_dim_1 = int(nhid)
+        self.hidden_dim_2 = int(nhid)
         self.hidden_layer_1 = nn.Linear(nhid, self.hidden_dim_1)
         self.hidden_layer_2 = nn.Linear(self.hidden_dim_1, self.hidden_dim_2)
         self.out_layer = nn.Linear(self.hidden_dim_2, 1)
@@ -52,6 +63,7 @@ class TransformerCorefScorer(nn.Module):
     def _pack_final(self, final_tensor):
         _, reorder_index = ((final_tensor == 0).sum(2) == 0).type(
             torch.IntTensor).to(self.device).sort(1, descending=True)
+        reorder_index = reorder_index.detach()
         gather_map = reorder_index.view(-1, (self.max_len * 10) + 1,
                                         1).expand(-1, -1, self.nhid)
         final_tensor = torch.gather(final_tensor, 1, gather_map)
@@ -62,7 +74,7 @@ class TransformerCorefScorer(nn.Module):
 
     def forward(self, src_mention_1, src_arg1_1, src_arg2_1, src_loc_1,
                 src_tmp_1, src_mention_2, src_arg1_2, src_arg2_2, src_loc_2,
-                src_tmp_2):
+                src_tmp_2, lengths_1, lengths_2):
 
         src_1 = self._transform_and_pack(src_mention_1, src_arg1_1, src_arg2_1,
                                          src_loc_1, src_tmp_1) + self.seq_1
@@ -70,17 +82,17 @@ class TransformerCorefScorer(nn.Module):
         src_2 = self._transform_and_pack(src_mention_2, src_arg1_2, src_arg2_2,
                                          src_loc_2, src_tmp_2) + self.seq_2
 
+        lengths = lengths_1 + lengths_2 + 1
+        padding_mask = ~(self.padding_mask_helper < lengths[:, None])
+
         seps = self.seperator.repeat(src_1.shape[0], 1, 1)
         src = torch.cat([src_1, seps, src_2], dim=1)
         src, map_to_seperators = self._pack_final(src)
-        max_seq_in_batch = ((src == 0).sum(2) == 0).sum(1).max().detach()
-        src = src[:, :max_seq_in_batch, :]
-        output = self.transformer_encoder(src)
-        sep_store = output.gather(1, map_to_seperators)
+        output = self.transformer_encoder(src.permute(1, 0, 2),
+                                          src_key_padding_mask=padding_mask)
+        sep_store = output.gather(0, map_to_seperators)
         sep_store = sep_store.view(-1, 768)
-        first_hidden = F.relu(self.hidden_layer_1(sep_store))
-        second_hidden = F.relu(self.hidden_layer_2(first_hidden))
-        out = F.sigmoid(self.out_layer(second_hidden))
+        out = F.sigmoid(self.out_layer(sep_store))
         return out
 
 
