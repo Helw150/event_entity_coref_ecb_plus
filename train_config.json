@@ -16,9 +16,9 @@
     "load_predicted_topics": false,
     "log_interval": 32,
     "loss": "bce",
-    "lr": 0.0001,
-    "merge_iters": 100,
-    "momentum": 0,
+    "lr": 0.001,
+    "merge_iters": 2,
+    "momentum": 0.0,
 
     "optimizer": "adamw",
     "patient": 20,

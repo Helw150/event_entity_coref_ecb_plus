@@ -226,8 +226,6 @@ def train_model(train_set, dev_set):
             best_saved_cd_entity_model.to(device)
         else:
             best_saved_cd_entity_model = cd_entity_model
-        if epoch < 10:
-            continue
         for event_threshold in threshold_list:
             for entity_threshold in threshold_list:
                 config_dict["event_merge_threshold"] = event_threshold
@@ -378,22 +376,21 @@ def train_and_merge(clusters, other_clusters, model, optimizer, loss, device,
                                                 requires_grad=False)
 
         cluster_pairs = test_cluster_pairs
-        if not config_dict["use_transformer"] or epoch > 10:
-            # Merge clusters till reaching the threshold
-            merge(clusters,
-                  cluster_pairs,
-                  other_clusters,
-                  model,
-                  device,
-                  topic.docs,
-                  epoch,
-                  topics_counter,
-                  topics_num,
-                  threshold,
-                  is_event,
-                  config_dict["use_args_feats"],
-                  config_dict["use_binary_feats"],
-                  config_dict=config_dict)
+        # Merge clusters till reaching the threshold
+        merge(clusters,
+              cluster_pairs,
+              other_clusters,
+              model,
+              device,
+              topic.docs,
+              epoch,
+              topics_counter,
+              topics_num,
+              threshold,
+              is_event,
+              config_dict["use_args_feats"],
+              config_dict["use_binary_feats"],
+              config_dict=config_dict)
 
 
 def save_epoch_f1(event_f1, entity_f1, epoch, best_event_th, best_entity_th):

@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import numpy as np
 from model_utils import *
 import torch.nn.functional as F
 import torch.autograd as autograd
@@ -24,7 +25,7 @@ class TransformerCorefScorer(nn.Module):
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
         self.seperator = nn.Parameter(
             torch.nn.init.normal_(torch.zeros(nhid).view(1, 1, -1),
-                                  mean=0.0,
+                                  mean=0,
                                   std=0.001))
         self.seq_1 = nn.Parameter(
             torch.nn.init.normal_(torch.zeros(nhid).view(1, 1, -1),
@@ -47,29 +48,36 @@ class TransformerCorefScorer(nn.Module):
             mask == 1, float(0.0))
         return mask
 
+    def destroy_debug(self, mention, arg1, arg2, loc, tmp):
+        arg1 = self.arg1_embedding(arg1.sum(1))
+        arg2 = self.arg2_embedding(arg2.sum(1))
+        loc = self.loc_embedding(loc.sum(1))
+        tmp = self.tmp_embedding(tmp.sum(1))
+        src = torch.stack([arg1, mention.sum(1), arg2, loc, tmp], dim=1)
+        return src
+
     def _transform_and_pack(self, mention, arg1, arg2, loc, tmp):
         arg1 = self.arg1_embedding(arg1)
         arg2 = self.arg2_embedding(arg2)
         loc = self.loc_embedding(loc)
         tmp = self.tmp_embedding(tmp)
-        src = torch.cat([arg1, mention, arg2, loc, tmp], dim=1)
-        _, re_order_index = ((src == 0).sum(2) == 0).type(torch.IntTensor).to(
-            self.device).sort(1, descending=True)
-        gather_map = re_order_index.view(-1, (self.max_len * 5),
-                                         1).expand(-1, -1, self.nhid)
+        src = torch.cat([mention, arg1, arg2, loc, tmp], dim=1)
+        re_order_index = np.argsort((src.sum(2) == 0).detach().cpu().numpy(),
+                                    kind="stable")
+        gather_map = torch.tensor(re_order_index).to(self.device).view(
+            -1, (self.max_len * 5), 1).expand(-1, -1, self.nhid)
         src = torch.gather(src, 1, gather_map)
         return src
 
     def _pack_final(self, final_tensor):
-        _, reorder_index = ((final_tensor == 0).sum(2) == 0).type(
-            torch.IntTensor).to(self.device).sort(1, descending=True)
-        reorder_index = reorder_index.detach()
-        gather_map = reorder_index.view(-1, (self.max_len * 10) + 1,
-                                        1).expand(-1, -1, self.nhid)
+        reorder_index = np.argsort(
+            (final_tensor.sum(2) == 0).detach().cpu().numpy(), kind="stable")
+        gather_map = torch.tensor(reorder_index).to(self.device).view(
+            -1, (self.max_len * 10) + 1, 1).expand(-1, -1, self.nhid)
         final_tensor = torch.gather(final_tensor, 1, gather_map)
-        map_to_seperators = (reorder_index == (
-            5 * self.max_len)).nonzero()[:, 1].view(-1, 1, 1).expand(
-                -1, -1, self.nhid)
+        map_to_seperators = torch.tensor(
+            np.argwhere(reorder_index == (5 * self.max_len))[:, 1]).to(
+                self.device).view(-1, 1, 1).expand(-1, -1, self.nhid)
         return final_tensor, map_to_seperators
 
     def forward(self, src_mention_1, src_arg1_1, src_arg2_1, src_loc_1,
@@ -79,20 +87,29 @@ class TransformerCorefScorer(nn.Module):
         src_1 = self._transform_and_pack(src_mention_1, src_arg1_1, src_arg2_1,
                                          src_loc_1, src_tmp_1) + self.seq_1
 
+        src_1_padding_mask = ~(self.padding_mask_helper[:, :150] <
+                               lengths_1[:, None])
+        src_1[src_1_padding_mask] = float(0.0)
+
         src_2 = self._transform_and_pack(src_mention_2, src_arg1_2, src_arg2_2,
                                          src_loc_2, src_tmp_2) + self.seq_2
 
-        lengths = lengths_1 + lengths_2 + 1
-        padding_mask = ~(self.padding_mask_helper < lengths[:, None])
+        src_2_padding_mask = ~(self.padding_mask_helper[:, :150] <
+                               lengths_2[:, None])
+        src_2[src_1_padding_mask] = float(0.0)
 
         seps = self.seperator.repeat(src_1.shape[0], 1, 1)
         src = torch.cat([src_1, seps, src_2], dim=1)
         src, map_to_seperators = self._pack_final(src)
+        lengths = lengths_1 + lengths_2 + 1
+        padding_mask = ~(self.padding_mask_helper < lengths[:, None])
+
         output = self.transformer_encoder(src.permute(1, 0, 2),
                                           src_key_padding_mask=padding_mask)
-        sep_store = output.gather(0, map_to_seperators)
-        sep_store = sep_store.view(-1, 768)
-        out = F.sigmoid(self.out_layer(sep_store))
+        sep_store = output.permute(1, 0,
+                                   2).gather(1, map_to_seperators).squeeze(1)
+        first_hidden = F.relu(self.hidden_layer_1(sep_store))
+        out = F.sigmoid(self.out_layer(first_hidden))
         return out
 
 

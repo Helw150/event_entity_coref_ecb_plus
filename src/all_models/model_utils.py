@@ -1024,23 +1024,17 @@ def generate_cluster_pairs(clusters, is_train):
     negative_pairs_count = 0
     pairs = []
     test_pairs = []
+    negative_pairs = []
+    positive_pairs = []
 
-    use_under_sampling = True if (len(clusters) > 300 and is_train) else False
-
-    if len(clusters) < 500:
-        p = 0.7
-    else:
-        p = 0.6
+    use_under_sampling = True
+    use_over_sampling = False
 
     print('Generating cluster pairs...')
     logging.info('Generating cluster pairs...')
 
     print('Initial number of clusters = {}'.format(len(clusters)))
     logging.info('Initial number of clusters = {}'.format(len(clusters)))
-
-    if use_under_sampling:
-        print('Using under sampling with p = {}'.format(p))
-        logging.info('Using under sampling with p = {}'.format(p))
 
     for cluster_1 in clusters:
         for cluster_2 in clusters:
@@ -1049,20 +1043,44 @@ def generate_cluster_pairs(clusters, is_train):
                     q = calc_q(cluster_1, cluster_2)
                     if (cluster_1, cluster_2, q) \
                             not in pairs and (cluster_2, cluster_1, q) not in pairs:
-                        add_to_training = False if use_under_sampling else True
                         if q > 0:
-                            add_to_training = True
                             positive_pairs_count += 1
-                        if q == 0 and random.random() < p:
-                            add_to_training = True
+                            positive_pairs.append((cluster_1, cluster_2, q))
+                        if q == 0:
                             negative_pairs_count += 1
-                        if add_to_training:
-                            pairs.append((cluster_1, cluster_2, q))
+                            negative_pairs.append((cluster_1, cluster_2, q))
                         test_pairs.append((cluster_1, cluster_2))
                 else:
                     if (cluster_1, cluster_2) not in pairs and \
                             (cluster_2, cluster_1) not in pairs:
                         pairs.append((cluster_1, cluster_2))
+
+    if is_train and use_under_sampling:
+        if positive_pairs_count < negative_pairs_count:
+            negative_pairs = random.sample(negative_pairs,
+                                           positive_pairs_count)
+        else:
+            positive_pairs = random.sample(positive_pairs,
+                                           negative_pairs_count)
+        pairs = positive_pairs + negative_pairs
+
+    for cluster in clusters:
+        if is_train:
+            q = calc_q(cluster, cluster)
+            if q == 1.0:
+                continue
+            else:
+                negative_pairs_count += 1
+                negative_pairs.append((cluster_1, cluster_2, q))
+        else:
+            break
+
+    if use_under_sampling:
+        print('Using under sampling')
+        logging.info('Using under sampling')
+    if use_over_sampling:
+        print('Using over sampling')
+        logging.info('Using over sampling')
 
     print('Number of generated cluster pairs = {}'.format(len(pairs)))
     logging.info('Number of generated cluster pairs = {}'.format(len(pairs)))
@@ -1528,6 +1546,7 @@ def train(cluster_pairs, model, optimizer, loss_function, device, topic_docs,
                 output = model(batch_tensor)
             loss = loss_function(output, q_tensor)
             loss.backward(retain_graph=retain_graph)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             optimizer.step()
             total_loss += loss.item()
 
@@ -1557,6 +1576,13 @@ def cluster_pair_to_mention_pair(pair):
 
     c1_mentions = cluster_1.mentions.values()
     c2_mentions = cluster_2.mentions.values()
+
+    if cluster_1 == cluster_2:
+        for mention_1 in c1_mentions:
+            for mention_2 in c2_mentions:
+                if mention_1.gold_tag != mention_2.gold_tag:
+                    mention2_pairs.append((mention_1, mention_2))
+        return mention_pairs
 
     for mention_1 in c1_mentions:
         for mention_2 in c2_mentions:
@@ -1668,9 +1694,9 @@ def test_pairs_batch_to_model_input(batch_pairs,
                                                dim=0).to(device),
                                    torch.stack(tmp_embeds_2_list,
                                                dim=0).to(device),
-                                   torch.stack(tmp_embeds_2_list,
+                                   torch.stack(length_1_list,
                                                dim=0).to(device),
-                                   torch.stack(tmp_embeds_2_list,
+                                   torch.stack(length_2_list,
                                                dim=0).to(device))
             return batch_pairs_tensors
         else:
