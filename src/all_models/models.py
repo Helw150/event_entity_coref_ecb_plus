@@ -6,13 +6,33 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 
 
+class CDCorefLightweight(nn.Module):
+    def __init__(self, nhid):
+        super(CDCorefLightweight, self).__init__()
+        self.nhid = nhid
+        self.weight_matrix = nn.Parameter(torch.Tensor(nhid, nhid))
+        nn.init.kaiming_uniform_(self.weight_matrix, a=math.sqrt(5))
+        self.joint_model = False
+
+    def forward(self, batch):
+        x_vecs = batch[:, 0, :].view(-1, 1, self.nhid)
+        y_vecs = batch[:, 1, :].view(-1, 1, self.nhid)
+        first_direction = (x_vecs).matmul(self.weight_matrix).matmul(
+            y_vecs.permute(0, 2, 1))
+        second_direction = (y_vecs).matmul(self.weight_matrix).matmul(
+            x_vecs.permute(0, 2, 1))
+        out = F.sigmoid(first_direction + second_direction).view(-1, 1)
+        return out
+
+
 class CDCorefScorer(nn.Module):
     '''
     An abstract class represents a coreference pairwise scorer.
     Inherits Pytorch's Module class.
     '''
-    def __init__(self, word_embeds, word_to_ix,vocab_size, char_embedding, char_to_ix, char_rep_size
-                 , dims, use_mult, use_diff, feature_size):
+    def __init__(self, word_embeds, word_to_ix, vocab_size, char_embedding,
+                 char_to_ix, char_rep_size, dims, use_mult, use_diff,
+                 feature_size):
         '''
         C'tor for CorefScorer object
         :param word_embeds: pre-trained word embeddings
@@ -33,24 +53,29 @@ class CDCorefScorer(nn.Module):
 
         '''
         super(CDCorefScorer, self).__init__()
+        self.joint_model = True
         self.embed = nn.Embedding(vocab_size, word_embeds.shape[1])
 
         self.embed.weight.data.copy_(torch.from_numpy(word_embeds))
-        self.embed.weight.requires_grad = False # pre-trained word embeddings are fixed
+        self.embed.weight.requires_grad = False  # pre-trained word embeddings are fixed
         self.word_to_ix = word_to_ix
 
-        self.char_embeddings = nn.Embedding(len(char_to_ix.keys()), char_embedding.shape[1])
-        self.char_embeddings.weight.data.copy_(torch.from_numpy(char_embedding))
+        self.char_embeddings = nn.Embedding(len(char_to_ix.keys()),
+                                            char_embedding.shape[1])
+        self.char_embeddings.weight.data.copy_(
+            torch.from_numpy(char_embedding))
         self.char_embeddings.weight.requires_grad = True
         self.char_to_ix = char_to_ix
         self.embedding_dim = word_embeds.shape[1]
         self.char_hidden_dim = char_rep_size
 
-        self.char_lstm = nn.LSTM(input_size=char_embedding.shape[1],hidden_size= self.char_hidden_dim,num_layers=1,
+        self.char_lstm = nn.LSTM(input_size=char_embedding.shape[1],
+                                 hidden_size=self.char_hidden_dim,
+                                 num_layers=1,
                                  bidirectional=False)
 
         # binary features for coreferring arguments/predicates
-        self.coref_role_embeds = nn.Embedding(2,feature_size)
+        self.coref_role_embeds = nn.Embedding(2, feature_size)
 
         self.use_mult = use_mult
         self.use_diff = use_diff
@@ -86,8 +111,10 @@ class CDCorefScorer(nn.Module):
         :param device: gpu/cpu Pytorch device
         :return: initialized hidden states (tensors)
         '''
-        return (torch.randn((1, 1, self.char_hidden_dim ), requires_grad=True).to(device),
-                torch.randn((1, 1, self.char_hidden_dim ), requires_grad=True).to(device))
+        return (torch.randn((1, 1, self.char_hidden_dim),
+                            requires_grad=True).to(device),
+                torch.randn((1, 1, self.char_hidden_dim),
+                            requires_grad=True).to(device))
 
     def get_char_embeds(self, seq, device):
         '''
@@ -98,7 +125,8 @@ class CDCorefScorer(nn.Module):
         '''
         char_hidden = self.init_char_hidden(device)
         input_char_seq = self.prepare_chars_seq(seq, device)
-        char_embeds = self.char_embeddings(input_char_seq).view(len(seq), 1, -1)
+        char_embeds = self.char_embeddings(input_char_seq).view(
+            len(seq), 1, -1)
         char_lstm_out, char_hidden = self.char_lstm(char_embeds, char_hidden)
         char_vec = char_lstm_out[-1]
 
@@ -123,10 +151,6 @@ class CDCorefScorer(nn.Module):
                 else:
                     idxs.append(self.char_to_ix['<UNK>'])
                     print('can find char {}'.format(w))
-        tensor = torch.tensor(idxs,dtype=torch.long).to(device)
+        tensor = torch.tensor(idxs, dtype=torch.long).to(device)
 
         return tensor
-
-
-
-
