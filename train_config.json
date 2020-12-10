@@ -1,10 +1,11 @@
 {
-    "batch_size": 16,
-    "accumulated_batch_size": 16,
+    "batch_size": 32,
+    "accumulated_batch_size": 32,
     "epochs": 50,
     "warmup_proportion" : 0.1,
     "early_stop_patience": 7,
     "gpu_num": 0,
+    "max_grad_norm" : 0.5,
     
     "lr": 0.0001,
     "momentum": 0,
@@ -14,6 +15,6 @@
     "random_seed": 2048,
     "seed": 1,
 
-    "dev_path": "trained_models_and_data/processed/full_swirl_ecb/dev_data",
-    "train_path": "trained_models_and_data/processed/full_swirl_ecb/training_data"
+    "dev_path": "feature_sets/vanilla/dev_data",
+    "train_path": "feature_sets/vanilla/training_data"
 }
