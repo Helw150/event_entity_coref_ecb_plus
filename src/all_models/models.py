@@ -7,10 +7,11 @@ import torch.autograd as autograd
 
 
 class CDCorefLightweight(nn.Module):
-    def __init__(self, nhid):
+    def __init__(self, nhid, dropout=0.2):
         super(CDCorefLightweight, self).__init__()
         self.nhid = nhid
         self.weight_matrix = nn.Parameter(torch.Tensor(nhid, nhid))
+        self.dropout = nn.Dropout(p=dropout)
         nn.init.kaiming_uniform_(self.weight_matrix, a=math.sqrt(5))
         self.joint_model = False
 
