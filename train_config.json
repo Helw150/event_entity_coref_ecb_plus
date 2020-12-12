@@ -1,13 +1,13 @@
 {
     "batch_size": 32,
-    "accumulated_batch_size": 32,
-    "epochs": 50,
+    "accumulated_batch_size": 4,
+    "epochs": 100,
     "warmup_proportion" : 0.1,
     "early_stop_patience": 7,
     "gpu_num": 0,
-    "max_grad_norm" : 0.5,
+    "max_grad_norm" : 1.0,
     
-    "lr": 0.0001,
+    "lr": 0.00001,
     "momentum": 0,
     "weight_decay": 0,
     "optimizer": "adam",

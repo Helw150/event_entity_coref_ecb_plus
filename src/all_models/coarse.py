@@ -2,8 +2,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
+import faiss
 from transformers import RobertaModel
 from tqdm import tqdm, trange
+
+
+def tokenize_and_map(sentence, tokenizer):
+    max_seq_length = 256
+    embeddings = tokenizer(sentence.get_raw_sentence())["input_ids"]
+    counter = 0
+    mapping = {k: [] for k, _ in enumerate(sentence.get_tokens_strings())}
+    for i, token in enumerate(tokenizer.convert_ids_to_tokens(embeddings)):
+        if token == "<s>" or token == "</s>":
+            continue
+        elif token[0] == "Ġ":
+            counter += 1
+            mapping[counter].append(i)
+        else:
+            mapping[counter].append(i)
+            continue
+    padding = [0] * (max_seq_length - len(embeddings))
+    embeddings += padding
+    return embeddings, mapping
 
 
 class EncoderCosineRanker(nn.Module):
@@ -14,24 +34,32 @@ class EncoderCosineRanker(nn.Module):
         self.mention_model = RobertaModel.from_pretrained('roberta-base',
                                                           return_dict=True)
         self.cluster_lookup = {}
+        self.faiss_index = {}
 
-    def update_cluster_lookup(self, label_sets):
-        self.cluster_lookup = {}
+    def update_cluster_lookup(self, label_sets, dev=False):
+        cluster_lookup = {}
+        index = faiss.IndexFlatIP(1536)
         with torch.no_grad():
-            for label_id, label_exemplar in tqdm(label_sets.items(),
-                                                 desc="Exemplar Reps"):
-                assert (label_exemplar["label"] == [label_id])
+            for label_id, label_records in tqdm(label_sets.items(),
+                                                desc="Exemplar Reps"):
+                assert (label_records[0]["label"] == [label_id])
                 sentences = torch.tensor(
-                    label_exemplar["sentence"]).unsqueeze(1).permute(1, 0).to(
-                        self.device)
+                    [record["sentence"] for record in label_records])
+                start_pieces = torch.tensor(
+                    [record["start_piece"] for record in label_records])
+                end_pieces = torch.tensor(
+                    [record["end_piece"] for record in label_records])
+                sentences = torch.tensor(sentences).to(self.device)
                 transformer_output = self.get_sentence_vecs(sentences)
-                start = torch.tensor(
-                    label_exemplar["start_piece"]).unsqueeze(1).to(self.device)
-                end = torch.tensor(
-                    label_exemplar["end_piece"]).unsqueeze(1).to(self.device)
+                start = torch.tensor(start_pieces).to(self.device)
+                end = torch.tensor(end_pieces).to(self.device)
                 mention_rep = self.get_mention_rep(transformer_output, start,
                                                    end)
-                self.cluster_lookup[label_id] = mention_rep
+                mention_rep = mention_rep.mean(dim=0)
+                cluster_lookup[label_id] = mention_rep
+                index.add(mention_rep.cpu().numpy())
+        self.cluster_lookup = cluster_lookup
+        self.faiss_index = index
 
     def get_sentence_vecs(self, sentences):
         expected_transformer_input = self.to_transformer_input(sentences)
@@ -59,24 +87,43 @@ class EncoderCosineRanker(nn.Module):
         }
 
     def convert_labels_to_reps(self, label):
-        return self.cluster_lookup[label[0]]
+        return self.cluster_lookup[label]
 
-    def forward(self, sentences, start_pieces, end_pieces, labels):
-        exemplars = list(
-            map(self.convert_labels_to_reps,
-                labels.cpu().tolist()))
-        exemplars = torch.cat(exemplars, dim=0)
+    def get_hard_cases(self, mention_reps, labels):
+        mention_reps = mention_reps.squeeze(1).detach().cpu().numpy()
+        _, hard_case_lists = self.faiss_index.search(mention_reps, 10)
+        hard_cases = []
+        for i, h_list in enumerate(hard_case_lists):
+            for j, hard_case in enumerate(h_list):
+                if labels[i] == hard_case:
+                    tqdm.write(str(j))
+                    break
+                hard_cases.append(hard_case)
+        return torch.tensor(hard_cases).to(self.device).unsqueeze(1)
+
+    def forward(self, sentences, start_pieces, end_pieces, labels, dev=False):
         transformer_output = self.get_sentence_vecs(sentences)
         mention_reps = self.get_mention_rep(transformer_output, start_pieces,
                                             end_pieces)
-        exemplars = exemplars.squeeze(1)
+        hard_cases = self.get_hard_cases(mention_reps, labels)
+        labels_with_hard_neg = torch.cat([labels, hard_cases], dim=0)
+        unique_clusters, local_labels = labels_with_hard_neg.unique(
+            return_inverse=True)
+        local_labels = local_labels[:len(labels)].squeeze(1)
+        exemplars = list(
+            map(self.convert_labels_to_reps,
+                unique_clusters.cpu().tolist()))
+        exemplars = torch.cat(exemplars, dim=0)
+        exemplars = exemplars
         mention_reps = mention_reps.squeeze(1)
-        scores = torch.mm(exemplars, mention_reps.t()).view(-1, 1)
+        scores = torch.mm(mention_reps, exemplars.t())
+        if not self.training:
+            return {"logits": logits}
 
-        pairwise_labels = (labels == labels.t()).view(-1, 1).type(
-            torch.FloatTensor).to(self.device)
-
-        loss_fct = nn.BCEWithLogitsLoss(reduction="mean")
-        loss = loss_fct(scores, pairwise_labels)
-
-        return loss, scores
+        predictions = scores.argmax(dim=1)
+        correct = torch.sum(predictions == local_labels)
+        total = float(predictions.shape[0])
+        acc = correct / total
+        loss_fct = nn.CrossEntropyLoss(reduction='sum')
+        loss = loss_fct(scores, local_labels)
+        return {"logits": scores, "loss": loss, "accuracy": acc}

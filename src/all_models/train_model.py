@@ -7,6 +7,7 @@ import argparse
 import numpy as np
 from tqdm import tqdm, trange
 from scorer import *
+from nearest_neighbor import nn_eval
 import _pickle as cPickle
 
 for pack in os.listdir("src"):
@@ -69,25 +70,7 @@ if args.use_cuda:
     print('Training with CUDA')
 
 tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-max_seq_length = 256
-
-
-def tokenize_and_map(sentence):
-    embeddings = tokenizer(sentence.get_raw_sentence())["input_ids"]
-    counter = 0
-    mapping = {k: [] for k, _ in enumerate(sentence.get_tokens_strings())}
-    for i, token in enumerate(tokenizer.convert_ids_to_tokens(embeddings)):
-        if token == "<s>" or token == "</s>":
-            continue
-        elif token[0] == "Ġ":
-            counter += 1
-            mapping[counter].append(i)
-        else:
-            mapping[counter].append(i)
-            continue
-    padding = [0] * (max_seq_length - len(embeddings))
-    embeddings += padding
-    return embeddings, mapping
+best_loss = None
 
 
 def structure_dataset(data_set, events=True):
@@ -102,12 +85,12 @@ def structure_dataset(data_set, events=True):
     for doc in docs:
         for sentence in doc.get_sentences().values():
             tokenized_sentence, tokenization_mapping = tokenize_and_map(
-                sentence)
+                sentence, tokenizer)
             sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
             for mention in sentence_mentions:
                 if mention.gold_tag not in labels_to_ids:
                     labels_to_ids[mention.gold_tag] = label_vocab_size
-                    exemplar = True
+                    label_sets[label_vocab_size] = []
                     label_vocab_size += 1
                 label_id = labels_to_ids[mention.gold_tag]
                 start_piece = tokenization_mapping[mention.start_offset][0]
@@ -119,9 +102,7 @@ def structure_dataset(data_set, events=True):
                     "end_piece": [end_piece]
                 }
                 processed_dataset.append(record)
-                if exemplar:
-                    label_sets[label_id] = record
-                    exemplar = False
+                label_sets[label_id].append(record)
 
     sentences = torch.tensor(
         [record["sentence"] for record in processed_dataset])
@@ -169,6 +150,52 @@ def get_scheduler(optimizer, len_train_data):
     return scheduler
 
 
+def evaluate(model, dev_data, dev_raw, dev_event_gold, epoch_num):
+    global best_loss
+    recall, mrr, maP = nn_eval(dev_raw, model)
+    loss_based = False
+    tqdm.write("Recall: {:.6f} - MRR: {:.6f} - MAP: {:.6f}".format(
+        recall, mrr, maP))
+    if not loss_based:
+        if best_loss == None or recall > best_loss:
+            tqdm.write("Recall Improved Saving Model")
+            best_loss = recall
+            torch.save(model.state_dict(),
+                       os.path.join(args.out_dir, 'best_model'))
+        return
+    with torch.no_grad():
+        model.update_cluster_lookup(dev_event_gold, dev=True)
+        tr_loss = 0
+        tr_accuracy = 0
+        examples = 0
+        for step, batch in enumerate(tqdm(dev_data, desc="Evaluation")):
+            batch = tuple(t.to(model.device) for t in batch)
+            sentences, start_pieces, end_pieces, labels = batch
+            out_dict = model(sentences,
+                             start_pieces,
+                             end_pieces,
+                             labels,
+                             dev=True)
+            loss = out_dict["loss"]
+            accuracy = out_dict["accuracy"]
+            examples += len(batch)
+            tr_loss += loss.item()
+            tr_accuracy += accuracy.item()
+        if best_loss == None or tr_loss < best_loss:
+            tqdm.write("Loss Improved Saving Model")
+            best_loss = tr_loss
+            torch.save(model.state_dict(),
+                       os.path.join(args.out_dir, 'best_model'))
+        logger.debug(
+            "Epoch {} - Dev Loss: {:.6f} - Dev Precision: {:.6f}".format(
+                epoch_num, tr_loss / float(examples),
+                tr_accuracy / len(dev_data)))
+        tqdm.write(
+            "Epoch {} - Dev Loss: {:.6f} - Dev Precision: {:.6f}".format(
+                epoch_num, tr_loss / float(examples),
+                tr_accuracy / len(dev_data)))
+
+
 def train_model(train_set, dev_set):
     device = torch.device("cuda:0" if args.use_cuda else "cpu")
     model = EncoderCosineRanker(device)
@@ -185,6 +212,10 @@ def train_model(train_set, dev_set):
     train_dataloader = DataLoader(train_event_mentions,
                                   sampler=train_sampler,
                                   batch_size=config_dict["batch_size"])
+    dev_sampler = RandomSampler(dev_event_mentions)
+    dev_dataloader = DataLoader(dev_event_mentions,
+                                sampler=dev_sampler,
+                                batch_size=config_dict["batch_size"])
 
     model.train()
     for epoch_idx in trange(int(config_dict["epochs"]), desc="Epoch"):
@@ -193,13 +224,14 @@ def train_model(train_set, dev_set):
         for step, batch in enumerate(tqdm(train_dataloader, desc="Batch")):
             batch = tuple(t.to(device) for t in batch)
             sentences, start_pieces, end_pieces, labels = batch
-            loss, _ = model(sentences, start_pieces, end_pieces, labels)
+            out_dict = model(sentences, start_pieces, end_pieces, labels)
+            loss = out_dict["loss"]
             loss.backward()
             tr_loss += loss.item()
 
             if (step + 1) * config_dict["batch_size"] % config_dict[
                     "accumulated_batch_size"] == 0:
-                tqdm.write("Step {} - epoch {} average loss: {:.6f}\n".format(
+                tqdm.write("Step {} - epoch {} average loss: {:.6f}".format(
                     step,
                     epoch_idx,
                     tr_loss / float(config_dict["accumulated_batch_size"]),
@@ -210,6 +242,7 @@ def train_model(train_set, dev_set):
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
+        evaluate(model, dev_dataloader, dev_set, dev_event_gold, epoch_idx)
 
 
 def main():
