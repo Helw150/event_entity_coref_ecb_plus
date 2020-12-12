@@ -95,9 +95,9 @@ class EncoderCosineRanker(nn.Module):
         hard_cases = []
         for i, h_list in enumerate(hard_case_lists):
             for j, hard_case in enumerate(h_list):
-                if labels[i] == hard_case:
-                    tqdm.write(str(j))
-                    break
+                #if labels[i] == hard_case:
+                #    tqdm.write(str(j))
+                #    break
                 hard_cases.append(hard_case)
         return torch.tensor(hard_cases).to(self.device).unsqueeze(1)
 

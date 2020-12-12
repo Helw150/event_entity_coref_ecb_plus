@@ -16,14 +16,19 @@ from classes import *
 tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
 
-def build_mention_reps(dataset, model, events=True):
-    processed_dataset = []
-    labels = []
-    label_vocab_size = 0
+def dataset_to_docs(dataset):
     docs = [
         document for topic in dataset.topics.values()
         for document in topic.docs.values()
     ]
+    return docs
+
+
+def build_mention_reps(docs, model, events=True):
+    processed_dataset = []
+    labels = []
+    mentions = []
+    label_vocab_size = 0
     for doc in docs:
         for sentence in doc.get_sentences().values():
             tokenized_sentence, tokenization_mapping = tokenize_and_map(
@@ -42,7 +47,7 @@ def build_mention_reps(dataset, model, events=True):
                 processed_dataset.append(mention_rep.detach().cpu().numpy()[0])
                 labels.append((mention.mention_str, mention.gold_tag))
 
-    return np.concatenate(processed_dataset, axis=0), labels
+    return np.concatenate(processed_dataset, axis=0), labels, mentions
 
 
 def mean_reciprocal_rank(rs):
@@ -70,8 +75,22 @@ def mean_average_precision(rs):
     return np.mean([average_precision(r) for r in rs])
 
 
-def nn_eval(eval_data, model, k=200):
-    vectors, labels = build_mention_reps(eval_data, model)
+def nn_generate_pairs(data, model, k=200):
+    vectors, labels, mentions = build_mention_reps(data, model)
+    index = faiss.IndexFlatIP(1536)
+    index.add(vectors)
+    D, I = index.search(vectors, k + 1)
+    pairs = []
+    for i, mention in enumerate(mentions):
+        nearest_neighbor_indexes = I[i][1:]
+        nearest_neighbors = [(mention, mentions[j])
+                             for j in nearest_neighbor_indexes]
+        pairs.extend(nearest_neighbors)
+    return pairs
+
+
+def nn_eval(eval_data, model, k=100):
+    vectors, labels, _ = build_mention_reps(dataset_to_docs(eval_data), model)
     index = faiss.IndexFlatIP(1536)
     index.add(vectors)
     # Add 1 since the first will be identity
@@ -117,7 +136,8 @@ if __name__ == '__main__':
         eval_data = cPickle.load(f)
     with open(args.model, 'rb') as f:
         params = torch.load(f)
-        model = EncoderCosineRanker(params)
+        model = EncoderCosineRanker("cuda:0")
+        model.load_state_dict(params)
     model.device = torch.device("cuda:0" if args.use_cuda else "cpu")
     model = model.to(model.device)
     recall, mrr, maP, mean_precision_k = nn_eval(eval_data, model)
