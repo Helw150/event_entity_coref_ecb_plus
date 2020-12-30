@@ -46,8 +46,37 @@ def build_mention_reps(docs, model, events=True):
                     end_piece.to(model.device))
                 processed_dataset.append(mention_rep.detach().cpu().numpy()[0])
                 labels.append((mention.mention_str, mention.gold_tag))
+                mentions.append(mention)
 
     return np.concatenate(processed_dataset, axis=0), labels, mentions
+
+
+def build_cluster_rep(cluster, model, docs):
+    cluster_rep = []
+    for mention in cluster.mentions.values():
+        sentence = docs[mention.doc_id].get_sentences()[mention.sent_id]
+        tokenized_sentence, tokenization_mapping = tokenize_and_map(
+            sentence, tokenizer)
+        sent_rep = model.get_sentence_vecs(
+            torch.tensor([tokenized_sentence]).to(model.device))
+        start_piece = torch.tensor(
+            [[tokenization_mapping[mention.start_offset][0]]])
+        end_piece = torch.tensor(
+            [[tokenization_mapping[mention.end_offset][-1]]])
+        mention_rep = model.get_mention_rep(sent_rep,
+                                            start_piece.to(model.device),
+                                            end_piece.to(model.device))
+        cluster_rep.append(mention_rep)
+    return torch.cat(cluster_rep, dim=0).mean(dim=0).detach().cpu().numpy()
+
+
+def build_cluster_reps(clusters, model, docs):
+    cluster_reps = []
+    sent_reps = {}
+    for cluster in clusters:
+        cluster_rep = build_cluster_rep(cluster, model, docs)
+        cluster_reps.append(cluster_rep)
+    return np.concatenate(cluster_reps, axis=0)
 
 
 def mean_reciprocal_rank(rs):
@@ -75,21 +104,54 @@ def mean_average_precision(rs):
     return np.mean([average_precision(r) for r in rs])
 
 
-def nn_generate_pairs(data, model, k=200):
-    vectors, labels, mentions = build_mention_reps(data, model)
+def nn_cluster_pairs(clusters, model, docs, k=10):
+    with torch.no_grad():
+        vectors = build_cluster_reps(clusters, model, docs)
     index = faiss.IndexFlatIP(1536)
     index.add(vectors)
     D, I = index.search(vectors, k + 1)
     pairs = []
-    for i, mention in enumerate(mentions):
+    for i, cluster in enumerate(clusters):
         nearest_neighbor_indexes = I[i][1:]
-        nearest_neighbors = [(mention, mentions[j])
+        nearest_neighbors = [(cluster, clusters[j])
                              for j in nearest_neighbor_indexes]
         pairs.extend(nearest_neighbors)
     return pairs
 
 
-def nn_eval(eval_data, model, k=100):
+def create_cluster_index(clusters, model, docs):
+    with torch.no_grad():
+        vectors = build_cluster_reps(clusters, model, docs)
+    index = faiss.IndexFlatIP(1536)
+    index.add(vectors)
+    return index
+
+
+def create_mention_index(docs, model):
+    with torch.no_grad():
+        vectors = build_mention_reps(docs, model)
+    index = faiss.IndexFlatIP(1536)
+    index.add(vectors)
+    return index
+
+
+def nn_generate_pairs(data, model, k=10, is_train=False):
+    vectors, labels, mentions = build_mention_reps(data, model)
+    index = faiss.IndexFlatIP(1536)
+    index.add(vectors)
+    D, I = index.search(vectors, k + 1)
+    pairs = set()
+    for i, mention in enumerate(mentions):
+        nearest_neighbor_indexes = I[i]
+        nearest_neighbors = set([
+            frozenset([mention, mentions[j]]) for j in nearest_neighbor_indexes
+            if mention.mention_id != mentions[j].mention_id
+        ])
+        pairs = pairs | nearest_neighbors
+    return pairs
+
+
+def nn_eval(eval_data, model, k=20):
     vectors, labels, _ = build_mention_reps(dataset_to_docs(eval_data), model)
     index = faiss.IndexFlatIP(1536)
     index.add(vectors)

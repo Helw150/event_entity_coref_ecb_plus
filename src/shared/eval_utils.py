@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 from classes import *
 
 
-def write_span_based_cd_coref_clusters(corpus, out_file, is_event, is_gold, use_gold_mentions):
+def write_span_based_cd_coref_clusters(corpus, out_file, is_event, is_gold,
+                                       use_gold_mentions):
     '''
     This function writes the predicted clusters to a file (in a CoNLL format) in a span based manner,
     means that each token is written to the file
@@ -61,22 +62,24 @@ def write_span_based_cd_coref_clusters(corpus, out_file, is_event, is_gold, use_
                 if is_event:
                     sent_mentions = curr_sent.gold_event_mentions if use_gold_mentions else curr_sent.pred_event_mentions
                 else:
-                    sent_mentions  = curr_sent.gold_entity_mentions if use_gold_mentions else curr_sent.pred_entity_mentions
+                    sent_mentions = curr_sent.gold_entity_mentions if use_gold_mentions else curr_sent.pred_entity_mentions
                 for mention in sent_mentions:
                     mentions_count += 1
-                    if is_gold: # writing key file
+                    if is_gold:  # writing key file
                         if mention.gold_tag not in cd_coref_chain_to_id:
                             cd_coref_chain_to_id_counter += 1
-                            cd_coref_chain_to_id[mention.gold_tag] = cd_coref_chain_to_id_counter
+                            cd_coref_chain_to_id[
+                                mention.
+                                gold_tag] = cd_coref_chain_to_id_counter
                         coref_chain = cd_coref_chain_to_id[mention.gold_tag]
-                    else: # writing response file
+                    else:  # writing response file
                         coref_chain = mention.cd_coref_chain
 
                     if use_gold_mentions:
                         start = mention.start_offset
                         end = mention.end_offset
-                    else: # ignore predicted mention that doesn't have compatible gold mention (following previous work)
-                        if mention.has_compatible_mention: # one should decide which span to use during evaluation (predicted span vs. gold span) since it is not clear what has been done in a previous work (Yang et al. and Choubey et al.)
+                    else:  # ignore predicted mention that doesn't have compatible gold mention (following previous work)
+                        if mention.has_compatible_mention:  # one should decide which span to use during evaluation (predicted span vs. gold span) since it is not clear what has been done in a previous work (Yang et al. and Choubey et al.)
                             # start = mention.gold_start
                             # end = mention.gold_end
                             start = mention.start_offset
@@ -90,11 +93,15 @@ def write_span_based_cd_coref_clusters(corpus, out_file, is_event, is_gold, use_
                         end_map[end].append((coref_chain, start))
 
                 for k, v in start_map.items():
-                    start_map[k] = [cluster_id for cluster_id, end in
-                                    sorted(v, key=operator.itemgetter(1), reverse=True)]
+                    start_map[k] = [
+                        cluster_id for cluster_id, end in sorted(
+                            v, key=operator.itemgetter(1), reverse=True)
+                    ]
                 for k, v in end_map.items():
-                    end_map[k] = [cluster_id for cluster_id, start in
-                                    sorted(v, key=operator.itemgetter(1), reverse=True)]
+                    end_map[k] = [
+                        cluster_id for cluster_id, start in sorted(
+                            v, key=operator.itemgetter(1), reverse=True)
+                    ]
 
                 for tok in sent_toks:
                     word_index = int(tok.token_id)
@@ -114,7 +121,10 @@ def write_span_based_cd_coref_clusters(corpus, out_file, is_event, is_gold, use_
                     else:
                         token_tag = "|".join(coref_list)
 
-                    out_coref.write('\t'.join([topic_id, '0', tok.token_id, tok.get_token(), token_tag]) + '\n')
+                    out_coref.write('\t'.join([
+                        topic_id, '0', tok.token_id,
+                        tok.get_token(), token_tag
+                    ]) + '\n')
 
         out_coref.write("#end document\n")
         out_coref.write('\n')
@@ -123,25 +133,24 @@ def write_span_based_cd_coref_clusters(corpus, out_file, is_event, is_gold, use_
     logger.info('{} mentions have been written.'.format(mentions_count))
 
 
-def write_clusters_to_file(clusters, file_obj,topic):
+def write_clusters_to_file(clusters, file_obj):
     '''
     Write the clusters to a text file (used for analysis)
     :param clusters: list of Cluster objects
     :param file_obj: file to write the clusters
-    :param topic - topic name
     '''
     i = 0
-    file_obj.write('Topic - ' + topic +'\n')
     for cluster in clusters:
         i += 1
         file_obj.write('cluster #' + str(i) + '\n')
         mentions_list = []
         for mention in cluster.mentions.values():
-            mentions_list.append('{}_{}'.format(mention.mention_str,mention.gold_tag))
+            mentions_list.append('{}_{}'.format(mention.mention_str,
+                                                mention.gold_tag))
         file_obj.write(str(mentions_list) + '\n\n')
 
 
-def write_mention_based_cd_clusters(corpus, is_event, is_gold,out_file):
+def write_mention_based_cd_clusters(corpus, is_event, is_gold, out_file):
     '''
     This function writes the cross-document (CD) predicted clusters to a file (in a CoNLL format)
     in a mention based manner, means that each token represents a mention and its coreference chain id is marked
@@ -182,11 +191,13 @@ def write_mention_based_cd_clusters(corpus, is_event, is_gold,out_file):
                     if is_gold:  # creating the key files
                         if mention.gold_tag not in cd_coref_chain_to_id:
                             cd_coref_chain_to_id_counter += 1
-                            cd_coref_chain_to_id[mention.gold_tag] = cd_coref_chain_to_id_counter
+                            cd_coref_chain_to_id[
+                                mention.
+                                gold_tag] = cd_coref_chain_to_id_counter
                         coref_chain = cd_coref_chain_to_id[mention.gold_tag]
                     else:  # writing the clusters at test time (response files)
                         coref_chain = mention.cd_coref_chain
-                    out_coref.write('{}\t({})\n'.format(generic,coref_chain))
+                    out_coref.write('{}\t({})\n'.format(generic, coref_chain))
     out_coref.write('#end document\n')
     out_coref.close()
 
@@ -237,17 +248,20 @@ def write_mention_based_wd_clusters(corpus, is_event, is_gold, out_file):
                     if is_gold:  # creating the key files
                         if mention.gold_tag not in cd_coref_chain_to_id:
                             cd_coref_chain_to_id_counter += 1
-                            cd_coref_chain_to_id[mention.gold_tag] = cd_coref_chain_to_id_counter
+                            cd_coref_chain_to_id[
+                                mention.
+                                gold_tag] = cd_coref_chain_to_id_counter
                         coref_chain = cd_coref_chain_to_id[mention.gold_tag]
                     else:  # writing the clusters at test time (response files)
                         coref_chain = mention.cd_coref_chain
 
                     if mention.doc_id not in doc_names_to_new_coref_id:
                         next_doc_increment += doc_increment
-                        doc_names_to_new_coref_id[mention.doc_id] = next_doc_increment
+                        doc_names_to_new_coref_id[
+                            mention.doc_id] = next_doc_increment
 
                     coref_chain += doc_names_to_new_coref_id[mention.doc_id]
 
-                    out_coref.write('{}\t({})\n'.format(generic,coref_chain))
+                    out_coref.write('{}\t({})\n'.format(generic, coref_chain))
     out_coref.write('#end document\n')
     out_coref.close()

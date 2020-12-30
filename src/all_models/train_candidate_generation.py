@@ -152,7 +152,7 @@ def get_scheduler(optimizer, len_train_data):
 
 def evaluate(model, dev_data, dev_raw, dev_event_gold, epoch_num):
     global best_loss
-    recall, mrr, maP = nn_eval(dev_raw, model)
+    recall, mrr, maP, p_at_k = nn_eval(dev_raw, model)
     loss_based = False
     tqdm.write("Recall: {:.6f} - MRR: {:.6f} - MAP: {:.6f}".format(
         recall, mrr, maP))

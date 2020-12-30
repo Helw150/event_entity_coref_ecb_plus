@@ -1,0 +1,25 @@
+{
+    "batch_size": 8,
+    "accumulated_batch_size": 8,
+    "epochs": 100,
+    "warmup_proportion" : 0.1,
+    "early_stop_patience": 7,
+    "gpu_num": 0,
+    "max_grad_norm" : 1.0,
+    
+    "lr": 0.00001,
+    "momentum": 0,
+    "weight_decay": 0,
+    "optimizer": "adam",
+
+    "random_seed": 2048,
+    "seed": 1,
+
+    "add_wd_pairs": false,
+    "all_positives": false,
+    "dev_path": "feature_sets/vanilla/dev_data",
+    "train_path": "feature_sets/vanilla/training_data",
+    "test_path": "feature_sets/vanilla/test_data",
+    "wd_entity_coref_file": "data/external/stanford_neural_wd_entity_coref_out/ecb_wd_coref.json",
+    "event_encoder_model": "models/l2/best_model"
+}
