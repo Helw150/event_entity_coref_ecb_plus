@@ -1,7 +1,7 @@
 {
-    "batch_size": 32,
-    "accumulated_batch_size": 32,
-    "epochs": 20,
+    "batch_size": 16,
+    "accumulated_batch_size": 16,
+    "epochs": 200,
     "warmup_proportion" : 0.1,
     "early_stop_patience": 7,
     "gpu_num": 0,
@@ -15,6 +15,6 @@
     "random_seed": 2048,
     "seed": 1,
 
-    "dev_path": "feature_sets/vanilla/dev_data",
-    "train_path": "feature_sets/vanilla/training_data"
+    "dev_path": "feature_sets/all_sents/dev_data",
+    "train_path": "feature_sets/all_sents/training_data"
 }

@@ -10,20 +10,30 @@ import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser(description='Parsing ECB+ corpus')
 
-parser.add_argument('--ecb_path', type=str,
+parser.add_argument('--ecb_path',
+                    type=str,
                     help=' The path to the ECB+ corpus')
-parser.add_argument('--output_dir', type=str,
-                        help=' The directory of the output files')
-parser.add_argument('--data_setup', type=int,
-                        help='Set the desirable dataset setup, 1 for Yang/Choubey setup and 2 for Cybulska/Kenyon-Dean setup (recommended)')
-parser.add_argument('--selected_sentences_file', type=str,
-                    help=' The path to a file contains selected sentences from the ECB+ corpus (relevant only for '
-                         'the second evaluation setup (Cybulska setup)')
+parser.add_argument('--output_dir',
+                    type=str,
+                    help=' The directory of the output files')
+parser.add_argument(
+    '--data_setup',
+    type=int,
+    help=
+    'Set the desirable dataset setup, 1 for Yang/Choubey setup and 2 for Cybulska/Kenyon-Dean setup (recommended)'
+)
+parser.add_argument(
+    '--selected_sentences_file',
+    type=str,
+    help=
+    ' The path to a file contains selected sentences from the ECB+ corpus (relevant only for '
+    'the second evaluation setup (Cybulska setup)')
 args = parser.parse_args()
 
 out_dir = args.output_dir
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
+
 
 class Token(object):
     '''
@@ -55,11 +65,11 @@ def read_selected_sentences(filename):
     list contains all the sentences IDs that were selected from that XML filename.
     '''
     xml_to_sent_dict = {}
-    with open(filename, 'rb') as csv_file:
+    with open(filename, 'rt') as csv_file:
         reader = csv.reader(csv_file, delimiter=',')
-        reader.next()
+        next(reader)
         for line in reader:
-            xml_filename = '{}_{}.xml'.format(line[0],line[1])
+            xml_filename = '{}_{}.xml'.format(line[0], line[1])
             sent_id = int(line[2])
 
             if xml_filename not in xml_to_sent_dict:
@@ -154,21 +164,27 @@ def calc_split_statistics(dataset_split, split_name, statistics_file_name):
 
         f.write('{} statistics\n'.format(split_name))
         f.write('-------------------------\n')
-        f.write( 'Number of event mentions - {}\n'.format(event_mentions_count))
-        f.write( 'Number of human participants mentions - {}\n'.format(human_mentions_count))
-        f.write( 'Number of non-human participants mentions - {}\n'.format(non_human_mentions_count))
-        f.write( 'Number of location mentions - {}\n'.format(loc_mentions_count))
-        f.write( 'Number of time mentions - {}\n'.format(time_mentions_count))
-        f.write( 'Total number of mentions - {}\n'.format(len(dataset_split)))
+        f.write('Number of event mentions - {}\n'.format(event_mentions_count))
+        f.write('Number of human participants mentions - {}\n'.format(
+            human_mentions_count))
+        f.write('Number of non-human participants mentions - {}\n'.format(
+            non_human_mentions_count))
+        f.write(
+            'Number of location mentions - {}\n'.format(loc_mentions_count))
+        f.write('Number of time mentions - {}\n'.format(time_mentions_count))
+        f.write('Total number of mentions - {}\n'.format(len(dataset_split)))
 
-        f.write( 'Number of non-continuous mentions - {}\n'.format(non_continuous_mentions_count))
-        f.write( 'Number of mentions with coref id = UNK - {}\n'.format(unk_coref_mentions_count))
-        f.write( 'Number of coref chains = {}\n'.format(len(coref_chains_dict)))
+        f.write('Number of non-continuous mentions - {}\n'.format(
+            non_continuous_mentions_count))
+        f.write('Number of mentions with coref id = UNK - {}\n'.format(
+            unk_coref_mentions_count))
+        f.write('Number of coref chains = {}\n'.format(len(coref_chains_dict)))
         f.write('\n')
 
 
-def save_gold_mention_statistics(train_extracted_mentions, dev_extracted_mentions,
-                                  test_extracted_mentions):
+def save_gold_mention_statistics(train_extracted_mentions,
+                                 dev_extracted_mentions,
+                                 test_extracted_mentions):
     '''
     This function calculates and saves the statistics of each split (train/dev/test) into a file.
     :param train_extracted_mentions: a list that contains all the mention objects in the train split
@@ -177,13 +193,13 @@ def save_gold_mention_statistics(train_extracted_mentions, dev_extracted_mention
     '''
     logger.info('Calculate mention statistics...')
 
-    all_data_mentions = train_extracted_mentions + dev_extracted_mentions +test_extracted_mentions
+    all_data_mentions = train_extracted_mentions + dev_extracted_mentions + test_extracted_mentions
     filename = 'mention_stats.txt'
     calc_split_statistics(train_extracted_mentions, 'Train set',
-                          os.path.join(args.output_dir,filename))
+                          os.path.join(args.output_dir, filename))
 
     calc_split_statistics(dev_extracted_mentions, 'Dev set',
-                            os.path.join(args.output_dir, filename))
+                          os.path.join(args.output_dir, filename))
 
     calc_split_statistics(test_extracted_mentions, 'Test set',
                           os.path.join(args.output_dir, filename))
@@ -194,8 +210,8 @@ def save_gold_mention_statistics(train_extracted_mentions, dev_extracted_mention
     logger.info('Save mention statistics...')
 
 
-def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extracted_mentions,
-                       parse_all, load_singletons):
+def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,
+                      extracted_mentions, parse_all, load_singletons):
     '''
     This function reads an ECB+ XML file (i.e. document), extracts its gold mentions and texts.
     the text file of each split is written as 5 columns -  the first column contains the document
@@ -240,9 +256,12 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
             if 'TAG_DESCRIPTOR' in action.attrib:
                 if 'instance_id' in action.attrib:
                     mid_to_event_tag_dict[cur_mid] = (
-                        action.attrib['TAG_DESCRIPTOR'], action.attrib['instance_id'])
+                        action.attrib['TAG_DESCRIPTOR'],
+                        action.attrib['instance_id'])
                 else:
-                    mid_to_event_tag_dict[cur_mid] = (action.attrib['TAG_DESCRIPTOR'], action.tag) #intra doc coref
+                    mid_to_event_tag_dict[cur_mid] = (
+                        action.attrib['TAG_DESCRIPTOR'], action.tag
+                    )  #intra doc coref
             else:
                 mid_to_tid_dict[cur_mid] = []
                 mid_to_tag[cur_mid] = action.tag
@@ -255,13 +274,17 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
         for child in within_doc_coref.iter():
             if child.tag == 'INTRA_DOC_COREF':
 
-                mention_coref_class = mid_to_event_tag_dict[within_doc_coref.find('target').get('m_id')][1] # find the mention class of intra doc coref mention
+                mention_coref_class = mid_to_event_tag_dict[
+                    within_doc_coref.find('target').get('m_id')][
+                        1]  # find the mention class of intra doc coref mention
                 if mention_coref_class == 'UNKNOWN_INSTANCE_TAG':
                     cls = 'UNK'
                 else:
-                    mention_class = mid_to_tag[within_doc_coref.find('source').get('m_id')]
+                    mention_class = mid_to_tag[within_doc_coref.find(
+                        'source').get('m_id')]
                     cls = find_mention_class(mention_class)
-                cur_instance_id = 'INTRA_{}_{}_{}'.format(cls,child.attrib['r_id'],doc_id)
+                cur_instance_id = 'INTRA_{}_{}_{}'.format(
+                    cls, child.attrib['r_id'], doc_id)
                 within_coref[cur_instance_id] = ()
             else:
                 if child.tag == 'source':
@@ -269,7 +292,9 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
                     mapped_mid.append(child.attrib['m_id'])
                     mid_to_coref_chain[child.attrib['m_id']] = cur_instance_id
                 else:
-                    within_coref[cur_instance_id] = (source_ids, mid_to_event_tag_dict[child.attrib['m_id']][0])
+                    within_coref[cur_instance_id] = (
+                        source_ids,
+                        mid_to_event_tag_dict[child.attrib['m_id']][0])
                     source_ids = []
 
     cur_instance_id = ''
@@ -287,11 +312,14 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
                     mid_to_coref_chain[child.attrib['m_id']] = cur_instance_id
                 else:
                     related_events[cur_instance_id] = (
-                        source_ids, mid_to_event_tag_dict[child.attrib['m_id']][0])
+                        source_ids,
+                        mid_to_event_tag_dict[child.attrib['m_id']][0])
                     source_ids = []
 
     for token in root.findall('token'):
-        tokens[token.attrib['t_id']] = Token(token.text, token.attrib['sentence'], token.attrib['number'])
+        tokens[token.attrib['t_id']] = Token(token.text,
+                                             token.attrib['sentence'],
+                                             token.attrib['number'])
 
     for key in related_events:
         for token_id in related_events[key][0]:
@@ -306,17 +334,20 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
             if mid not in mapped_mid:  # singleton mention
                 mention_class = mid_to_tag[mid]
                 cls = find_mention_class(mention_class)
-                singleton_instance_id = 'Singleton_{}_{}_{}'.format(cls,mid,doc_id )
+                singleton_instance_id = 'Singleton_{}_{}_{}'.format(
+                    cls, mid, doc_id)
                 mid_to_coref_chain[mid] = singleton_instance_id
                 unmapped_tids = mid_to_tid_dict[mid]
                 for token_id in unmapped_tids:
                     if tokens[token_id].rel_id is None:
-                        tokens[token_id].rel_id = (singleton_instance_id,'padding')
+                        tokens[token_id].rel_id = (singleton_instance_id,
+                                                   'padding')
 
     # creating an instance for each mention
     for mid in mid_to_tid_dict:
         tids = mid_to_tid_dict[mid]
-        token_numbers = []  # the ordinal token numbers of each token in its sentence
+        token_numbers = [
+        ]  # the ordinal token numbers of each token in its sentence
         tokens_str = []
         sent_id = None
 
@@ -326,10 +357,12 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
         type_tag = mid_to_tag[mid]
         mention_type = find_mention_class(type_tag)
 
-        mention_type_by_coref_chain = coref_chain_id_to_mention_type(coref_chain)
+        mention_type_by_coref_chain = coref_chain_id_to_mention_type(
+            coref_chain)
         if mention_type != mention_type_by_coref_chain:
             print('coref chain: {}'.format(coref_chain))
-            print('mention type by coref chain: {}'.format(mention_type_by_coref_chain))
+            print('mention type by coref chain: {}'.format(
+                mention_type_by_coref_chain))
             print('mention type: {}'.format(mention_type))
 
         for token_id in tids:
@@ -339,21 +372,29 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
 
             if int(token.tok_id) not in token_numbers:
                 token_numbers.append(int(token.tok_id))
-                tokens_str.append(token.text.encode('ascii', 'ignore'))
+                tokens_str.append(token.text)
 
-        is_continuous = True if token_numbers == range(token_numbers[0], token_numbers[-1]+1) else False
+        is_continuous = True if token_numbers == range(
+            token_numbers[0], token_numbers[-1] + 1) else False
         is_singleton = True if 'Singleton' in coref_chain else False
         if parse_all or sent_id in selected_sent_list:
             if 'plus' in doc_id:
                 if sent_id > 0:
                     sent_id -= 1
-            if parse_all and (doc_id == '9_3ecbplus' or doc_id == '9_4ecbplus'):
+            if parse_all and (doc_id == '9_3ecbplus'
+                              or doc_id == '9_4ecbplus'):
                 if sent_id > 0:
                     sent_id -= 1
 
-            mention_obj = MentionData(doc_id, sent_id, token_numbers, ' '.join(tokens_str),
-                                       coref_chain, mention_type,is_continuous=is_continuous,
-                                       is_singleton=is_singleton, score=float(-1))
+            mention_obj = MentionData(doc_id,
+                                      sent_id,
+                                      token_numbers,
+                                      ' '.join(tokens_str),
+                                      coref_chain,
+                                      mention_type,
+                                      is_continuous=is_continuous,
+                                      is_singleton=is_singleton,
+                                      score=float(-1))
             extracted_mentions.append(mention_obj)
     prev_sent_id = None
 
@@ -361,12 +402,12 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
         token = tokens[token.attrib['t_id']]
         token_id = int(token.tok_id)
         sent_id = int(token.sent_id)
-        if not parse_all and sent_id not in selected_sent_list:
-            continue
+        selected = (parse_all or sent_id in selected_sent_list)
         if 'plus' in doc_id:
             if sent_id > 0:
                 sent_id -= 1
-                if parse_all and (doc_id == '9_3ecbplus' or doc_id == '9_4ecbplus'):
+                if parse_all and (doc_id == '9_3ecbplus'
+                                  or doc_id == '9_4ecbplus'):
                     if sent_id == 0:
                         continue
                     else:
@@ -377,16 +418,17 @@ def read_ecb_plus_doc(selected_sent_list, doc_filename, doc_id, file_obj,extract
         if prev_sent_id is None or prev_sent_id != sent_id:
             file_obj.write('\n')
             prev_sent_id = sent_id
-        text = token.text.encode('ascii', 'ignore')
+        text = token.text
 
         if text == '' or text == '\t':
             text = '-'
 
-        if token.rel_id is not None:
+        if token.rel_id is not None and selected:
             file_obj.write(doc_id + '\t' + str(sent_id) + '\t' + str(token_id) + '\t' + text + '\t' + \
                             token.rel_id[0] + '\n')
         else:
-            file_obj.write(doc_id + '\t' + str(sent_id) + '\t' + str(token_id) + '\t' + text + '\t-' + '\n')
+            file_obj.write(doc_id + '\t' + str(sent_id) + '\t' +
+                           str(token_id) + '\t' + text + '\t-' + '\n')
 
 
 def obj_dict(obj):
@@ -410,17 +452,28 @@ def save_split_mentions_to_json(split_name, mentions_list):
         else:
             entity_mentions.append(mention_obj)
 
-    json_event_filename = os.path.join(args.output_dir, 'ECB_{}_Event_gold_mentions.json'.format(split_name))
-    json_entity_filename =  os.path.join(args.output_dir, 'ECB_{}_Entity_gold_mentions.json'.format(split_name))
+    json_event_filename = os.path.join(
+        args.output_dir, 'ECB_{}_Event_gold_mentions.json'.format(split_name))
+    json_entity_filename = os.path.join(
+        args.output_dir, 'ECB_{}_Entity_gold_mentions.json'.format(split_name))
 
     with open(json_event_filename, 'w') as f:
-        json.dump(event_mentions, f, default=obj_dict, indent=4, sort_keys=True)
+        json.dump(event_mentions,
+                  f,
+                  default=obj_dict,
+                  indent=4,
+                  sort_keys=True)
 
     with open(json_entity_filename, 'w') as f:
-        json.dump(entity_mentions, f, default=obj_dict, indent=4, sort_keys=True)
+        json.dump(entity_mentions,
+                  f,
+                  default=obj_dict,
+                  indent=4,
+                  sort_keys=True)
 
 
-def parse_selected_sentences(xml_to_sent_dict, parse_all, load_singletons,data_setup):
+def parse_selected_sentences(xml_to_sent_dict, parse_all, load_singletons,
+                             data_setup):
     '''
 
     :param xml_to_sent_dict: selected sentences dictionary
@@ -433,14 +486,16 @@ def parse_selected_sentences(xml_to_sent_dict, parse_all, load_singletons,data_s
      1 for Yang and Choubey setup and 2 for Cybulska Kenyon-Dean setup (recommended).
     '''
     if data_setup == 1:  # Yang setup
-        train_topics = range(1,23)
-        dev_topics = range(23,26)
+        train_topics = range(1, 23)
+        dev_topics = range(23, 26)
     else:  # Cybulska setup
         dev_topics = [2, 5, 12, 18, 21, 23, 34, 35]
-        train_topics = [i for i in range(1,36) if i not in dev_topics]  # train topics 1-35 , test topics 36-45
+        train_topics = [i for i in range(1, 36) if i not in dev_topics
+                        ]  # train topics 1-35 , test topics 36-45
 
     dev_out = open(os.path.join(args.output_dir, 'ECB_Dev_corpus.txt'), 'w')
-    train_out = open(os.path.join(args.output_dir, 'ECB_Train_corpus.txt'), 'w')
+    train_out = open(os.path.join(args.output_dir, 'ECB_Train_corpus.txt'),
+                     'w')
     test_out = open(os.path.join(args.output_dir, 'ECB_Test_corpus.txt'), 'w')
 
     dirs = os.listdir(args.ecb_path)
@@ -455,7 +510,7 @@ def parse_selected_sentences(xml_to_sent_dict, parse_all, load_singletons,data_s
     for topic in sorted(dirs_int):
         dir = str(topic)
 
-        doc_files = os.listdir(os.path.join(args.ecb_path,dir))
+        doc_files = os.listdir(os.path.join(args.ecb_path, dir))
         ecb_files = []
         ecb_plus_files = []
         for doc_file in doc_files:
@@ -466,41 +521,49 @@ def parse_selected_sentences(xml_to_sent_dict, parse_all, load_singletons,data_s
                 ecb_files.append(doc_file)
 
         ecb_files = sorted(ecb_files)
-        ecb_plus_files=sorted(ecb_plus_files)
+        ecb_plus_files = sorted(ecb_plus_files)
 
         for ecb_file in ecb_files:
             if parse_all or ecb_file in xml_to_sent_dict:
-                xml_filename = os.path.join(os.path.join(args.ecb_path,dir),ecb_file)
+                xml_filename = os.path.join(os.path.join(args.ecb_path, dir),
+                                            ecb_file)
                 if parse_all:
                     selected_sentences = None
                 else:
                     selected_sentences = xml_to_sent_dict[ecb_file]
                 if topic in train_topics:
-                    train_ecb_files_sorted.append((selected_sentences, xml_filename,
-                                                   ecb_file.replace('.xml', '')))
+                    train_ecb_files_sorted.append(
+                        (selected_sentences, xml_filename,
+                         ecb_file.replace('.xml', '')))
                 elif topic in dev_topics:
-                    dev_ecb_files_sorted.append((selected_sentences, xml_filename,
-                                                   ecb_file.replace('.xml', '')))
+                    dev_ecb_files_sorted.append(
+                        (selected_sentences, xml_filename,
+                         ecb_file.replace('.xml', '')))
                 else:
-                    test_ecb_files_sorted.append((selected_sentences, xml_filename,
-                                                  ecb_file.replace('.xml', '')))
+                    test_ecb_files_sorted.append(
+                        (selected_sentences, xml_filename,
+                         ecb_file.replace('.xml', '')))
 
         for ecb_file in ecb_plus_files:
             if parse_all or ecb_file in xml_to_sent_dict:
-                xml_filename = os.path.join(os.path.join(args.ecb_path,dir),ecb_file)
+                xml_filename = os.path.join(os.path.join(args.ecb_path, dir),
+                                            ecb_file)
                 if parse_all:
                     selected_sentences = None
                 else:
                     selected_sentences = xml_to_sent_dict[ecb_file]
                 if topic in train_topics:
-                    train_ecb_plus_files_sorted.append((selected_sentences,
-                                                        xml_filename, ecb_file.replace('.xml', '')))
+                    train_ecb_plus_files_sorted.append(
+                        (selected_sentences, xml_filename,
+                         ecb_file.replace('.xml', '')))
                 elif topic in dev_topics:
-                    dev_ecb_plus_files_sorted.append((selected_sentences,
-                                                        xml_filename, ecb_file.replace('.xml', '')))
+                    dev_ecb_plus_files_sorted.append(
+                        (selected_sentences, xml_filename,
+                         ecb_file.replace('.xml', '')))
                 else:
                     test_ecb_plus_files_sorted.append(
-                        (selected_sentences, xml_filename, ecb_file.replace('.xml', '')))
+                        (selected_sentences, xml_filename,
+                         ecb_file.replace('.xml', '')))
 
     train_files = train_ecb_files_sorted + train_ecb_plus_files_sorted
     test_files = test_ecb_files_sorted + test_ecb_plus_files_sorted
@@ -511,19 +574,23 @@ def parse_selected_sentences(xml_to_sent_dict, parse_all, load_singletons,data_s
     test_extracted_mentions = []
 
     for doc in train_files:
-        read_ecb_plus_doc(doc[0], doc[1],doc[2],train_out,train_extracted_mentions, parse_all, load_singletons)
+        read_ecb_plus_doc(doc[0], doc[1], doc[2], train_out,
+                          train_extracted_mentions, parse_all, load_singletons)
 
     for doc in dev_files:
-        read_ecb_plus_doc(doc[0], doc[1], doc[2], dev_out, dev_extracted_mentions, parse_all, load_singletons)
+        read_ecb_plus_doc(doc[0], doc[1], doc[2], dev_out,
+                          dev_extracted_mentions, parse_all, load_singletons)
 
     for doc in test_files:
-        read_ecb_plus_doc(doc[0], doc[1],doc[2],test_out,test_extracted_mentions, parse_all, load_singletons)
+        read_ecb_plus_doc(doc[0], doc[1], doc[2], test_out,
+                          test_extracted_mentions, parse_all, load_singletons)
 
     train_out.close()
     dev_out.close()
     test_out.close()
 
-    save_gold_mention_statistics(train_extracted_mentions, dev_extracted_mentions,
+    save_gold_mention_statistics(train_extracted_mentions,
+                                 dev_extracted_mentions,
                                  test_extracted_mentions)
 
     save_split_mentions_to_json('Train', train_extracted_mentions)
@@ -547,11 +614,17 @@ def main():
     """
     logger.info('Read ECB+ files')
     if args.data_setup == 1:  # Reads the full ECB+ corpus without singletons (Yang setup)
-        parse_selected_sentences(xml_to_sent_dict={}, parse_all=True, load_singletons=False, data_setup=1)
+        parse_selected_sentences(xml_to_sent_dict={},
+                                 parse_all=True,
+                                 load_singletons=False,
+                                 data_setup=1)
     elif args.data_setup == 2:  # Reads the a reviewed subset of the ECB+ (Cybulska setup)
-        xml_to_sent_dict = read_selected_sentences(args.selected_sentences_file)
-        parse_selected_sentences(xml_to_sent_dict=xml_to_sent_dict,parse_all=False,
-                                 load_singletons=True,data_setup=2)
+        xml_to_sent_dict = read_selected_sentences(
+            args.selected_sentences_file)
+        parse_selected_sentences(xml_to_sent_dict=xml_to_sent_dict,
+                                 parse_all=False,
+                                 load_singletons=True,
+                                 data_setup=2)
     logger.info('ECB+ Reading was done.')
 
 

@@ -2,6 +2,7 @@ import argparse
 from coarse import *
 import faiss
 import numpy as np
+from scipy import stats
 import os
 import sys
 import torch
@@ -30,17 +31,28 @@ def build_mention_reps(docs, model, events=True):
     mentions = []
     label_vocab_size = 0
     for doc in docs:
-        for sentence in doc.get_sentences().values():
-            tokenized_sentence, tokenization_mapping = tokenize_and_map(
-                sentence, tokenizer)
+        sentences = doc.get_sentences()
+        for sentence_id in sentences:
+            sentence = sentences[sentence_id]
             sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
+            if len(sentence_mentions) == 0:
+                continue
+            lookback = max(0, sentence_id - 5)
+            lookforward = min(sentence_id + 5, max(sentences.keys())) + 1
+            tokenization_input = ([
+                sentences[_id] for _id in range(lookback, lookforward)
+            ], sentence_id - lookback)
+            tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
+                tokenization_input[0], tokenizer, tokenization_input[1])
             sentence_vec = model.get_sentence_vecs(
                 torch.tensor([tokenized_sentence]).to(model.device))
             for mention in sentence_mentions:
-                start_piece = torch.tensor(
-                    [[tokenization_mapping[mention.start_offset][0]]])
-                end_piece = torch.tensor(
-                    [[tokenization_mapping[mention.end_offset][-1]]])
+                start_piece = torch.tensor([[
+                    tokenization_mapping[sent_offset + mention.start_offset][0]
+                ]])
+                end_piece = torch.tensor([[
+                    tokenization_mapping[sent_offset + mention.end_offset][-1]
+                ]])
                 mention_rep = model.get_mention_rep(
                     sentence_vec, start_piece.to(model.device),
                     end_piece.to(model.device))
@@ -55,8 +67,8 @@ def build_cluster_rep(cluster, model, docs):
     cluster_rep = []
     for mention in cluster.mentions.values():
         sentence = docs[mention.doc_id].get_sentences()[mention.sent_id]
-        tokenized_sentence, tokenization_mapping = tokenize_and_map(
-            sentence, tokenizer)
+        tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
+            [sentence], tokenizer, 0)
         sent_rep = model.get_sentence_vecs(
             torch.tensor([tokenized_sentence]).to(model.device))
         start_piece = torch.tensor(
@@ -143,15 +155,15 @@ def nn_generate_pairs(data, model, k=10, is_train=False):
     pairs = set()
     for i, mention in enumerate(mentions):
         nearest_neighbor_indexes = I[i]
-        nearest_neighbors = set([
-            frozenset([mention, mentions[j]]) for j in nearest_neighbor_indexes
-            if mention.mention_id != mentions[j].mention_id
-        ])
+        nearest_neighbors = set()
+        for nn_index, j in enumerate(nearest_neighbor_indexes):
+            if mention.mention_id != mentions[j].mention_id:
+                nearest_neighbors.add(frozenset([mention, mentions[j]]))
         pairs = pairs | nearest_neighbors
     return pairs
 
 
-def nn_eval(eval_data, model, k=20):
+def nn_eval(eval_data, model, k=5):
     vectors, labels, _ = build_mention_reps(dataset_to_docs(eval_data), model)
     index = faiss.IndexFlatIP(1536)
     index.add(vectors)
@@ -200,6 +212,7 @@ if __name__ == '__main__':
         params = torch.load(f)
         model = EncoderCosineRanker("cuda:0")
         model.load_state_dict(params)
+        model.eval()
     model.device = torch.device("cuda:0" if args.use_cuda else "cpu")
     model = model.to(model.device)
     recall, mrr, maP, mean_precision_k = nn_eval(eval_data, model)

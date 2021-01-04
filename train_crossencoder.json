@@ -1,5 +1,5 @@
 {
-    "batch_size": 8,
+    "batch_size": 2,
     "accumulated_batch_size": 8,
     "epochs": 100,
     "warmup_proportion" : 0.1,
@@ -17,9 +17,9 @@
 
     "add_wd_pairs": false,
     "all_positives": false,
-    "dev_path": "feature_sets/vanilla/dev_data",
-    "train_path": "feature_sets/vanilla/training_data",
-    "test_path": "feature_sets/vanilla/test_data",
+    "dev_path": "feature_sets/all_sents/dev_data",
+    "train_path": "feature_sets/all_sents/training_data",
+    "test_path": "feature_sets/all_sents/test_data",
     "wd_entity_coref_file": "data/external/stanford_neural_wd_entity_coref_out/ecb_wd_coref.json",
-    "event_encoder_model": "models/l2/best_model"
+    "event_encoder_model": "models/multi_sent_biencoder_overnight/best_model"
 }

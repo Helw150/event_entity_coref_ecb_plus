@@ -7,13 +7,25 @@ from transformers import RobertaModel
 from tqdm import tqdm, trange
 
 
-def tokenize_and_map(sentence, tokenizer):
-    max_seq_length = 256
-    embeddings = tokenizer(sentence.get_raw_sentence())["input_ids"]
+def tokenize_and_map(sentences, tokenizer, mention_sentence=0):
+    max_seq_length = 512
+    mapping = {}
+    raw_strings = []
+    offset = 0
+    for i, sentence in enumerate(sentences):
+        raw_strings.append(sentence.get_raw_sentence())
+        if i == mention_sentence:
+            mention_offset = offset
+        for _ in sentence.get_tokens_strings():
+            mapping[offset] = []
+            offset += 1
+    embeddings = tokenizer(' '.join(raw_strings),
+                           max_length=max_seq_length,
+                           truncation=True,
+                           padding="max_length")["input_ids"]
     counter = 0
-    mapping = {k: [] for k, _ in enumerate(sentence.get_tokens_strings())}
     for i, token in enumerate(tokenizer.convert_ids_to_tokens(embeddings)):
-        if token == "<s>" or token == "</s>":
+        if token == "<s>" or token == "</s>" or token == "<pad>":
             continue
         elif token[0] == "Ġ":
             counter += 1
@@ -21,9 +33,7 @@ def tokenize_and_map(sentence, tokenizer):
         else:
             mapping[counter].append(i)
             continue
-    padding = [0] * (max_seq_length - len(embeddings))
-    embeddings += padding
-    return embeddings, mapping
+    return embeddings, mapping, mention_offset
 
 
 class EncoderCosineRanker(nn.Module):
@@ -79,7 +89,7 @@ class EncoderCosineRanker(nn.Module):
 
     def to_transformer_input(self, sentence_tokens):
         segment_idx = sentence_tokens * 0
-        mask = sentence_tokens != 0
+        mask = sentence_tokens != 1
         return {
             "input_ids": sentence_tokens,
             "token_type_ids": segment_idx,

@@ -83,18 +83,29 @@ def structure_dataset(data_set, events=True):
         for document in topic.docs.values()
     ]
     for doc in docs:
-        for sentence in doc.get_sentences().values():
-            tokenized_sentence, tokenization_mapping = tokenize_and_map(
-                sentence, tokenizer)
+        sentences = doc.get_sentences()
+        for sentence_id in sentences:
+            sentence = sentences[sentence_id]
             sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
+            if len(sentence_mentions) == 0:
+                continue
+            lookback = max(0, sentence_id - 5)
+            lookforward = min(sentence_id + 5, max(sentences.keys())) + 1
+            tokenization_input = ([
+                sentences[_id] for _id in range(lookback, lookforward)
+            ], sentence_id - lookback)
+            tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
+                tokenization_input[0], tokenizer, tokenization_input[1])
             for mention in sentence_mentions:
                 if mention.gold_tag not in labels_to_ids:
                     labels_to_ids[mention.gold_tag] = label_vocab_size
                     label_sets[label_vocab_size] = []
                     label_vocab_size += 1
                 label_id = labels_to_ids[mention.gold_tag]
-                start_piece = tokenization_mapping[mention.start_offset][0]
-                end_piece = tokenization_mapping[mention.end_offset][-1]
+                start_piece = tokenization_mapping[sent_offset +
+                                                   mention.start_offset][0]
+                end_piece = tokenization_mapping[sent_offset +
+                                                 mention.end_offset][-1]
                 record = {
                     "sentence": tokenized_sentence,
                     "label": [label_id],
@@ -151,6 +162,7 @@ def get_scheduler(optimizer, len_train_data):
 
 
 def evaluate(model, dev_data, dev_raw, dev_event_gold, epoch_num):
+    model.eval()
     global best_loss
     recall, mrr, maP, p_at_k = nn_eval(dev_raw, model)
     loss_based = False
@@ -217,11 +229,12 @@ def train_model(train_set, dev_set):
                                 sampler=dev_sampler,
                                 batch_size=config_dict["batch_size"])
 
-    model.train()
     for epoch_idx in trange(int(config_dict["epochs"]), desc="Epoch"):
+        model.train()
         tr_loss = 0.0
         model.update_cluster_lookup(train_event_gold)
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Batch")):
+        batcher = tqdm(train_dataloader, desc="Batch")
+        for step, batch in enumerate(batcher):
             batch = tuple(t.to(device) for t in batch)
             sentences, start_pieces, end_pieces, labels = batch
             out_dict = model(sentences, start_pieces, end_pieces, labels)
@@ -231,11 +244,12 @@ def train_model(train_set, dev_set):
 
             if (step + 1) * config_dict["batch_size"] % config_dict[
                     "accumulated_batch_size"] == 0:
-                tqdm.write("Step {} - epoch {} average loss: {:.6f}".format(
-                    step,
-                    epoch_idx,
-                    tr_loss / float(config_dict["accumulated_batch_size"]),
-                ))
+                batcher.set_description(
+                    "Batch {} - epoch {} average loss: {:.6f}".format(
+                        step,
+                        epoch_idx,
+                        tr_loss / float(config_dict["accumulated_batch_size"]),
+                    ))
                 tr_loss = 0
                 torch.nn.utils.clip_grad_norm_(model.parameters(),
                                                config_dict["max_grad_norm"])

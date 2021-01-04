@@ -116,15 +116,25 @@ def wd_comparisons(docs, events):
     return pairs
 
 
+def get_sents(sentences, sentence_id):
+    window = 2
+    lookback = max(0, sentence_id - window)
+    lookforward = min(sentence_id + window, max(sentences.keys())) + 1
+    return ([sentences[_id]
+             for _id in range(lookback, lookforward)], sentence_id - lookback)
+
+
 def structure_pair(mention_1, mention_2, doc_dict):
-    sent_1 = doc_dict[mention_1.doc_id].sentences[mention_1.sent_id]
-    sent_2 = doc_dict[mention_2.doc_id].sentences[mention_2.sent_id]
-    tokens, token_map, offset = tokenize_and_map_pair(sent_1, sent_2,
-                                                      tokenizer)
-    start_piece_1 = token_map[mention_1.start_offset][0]
-    end_piece_1 = token_map[mention_1.end_offset][-1]
-    start_piece_2 = token_map[offset + mention_2.start_offset][0]
-    end_piece_2 = token_map[offset + mention_2.end_offset][-1]
+    sents_1, sent_id_1 = get_sents(doc_dict[mention_1.doc_id].sentences,
+                                   mention_1.sent_id)
+    sents_2, sent_id_2 = get_sents(doc_dict[mention_2.doc_id].sentences,
+                                   mention_2.sent_id)
+    tokens, token_map, offset_1, offset_2 = tokenize_and_map_pair(
+        sents_1, sents_2, sent_id_1, sent_id_2, tokenizer)
+    start_piece_1 = token_map[offset_1 + mention_1.start_offset][0]
+    end_piece_1 = token_map[offset_1 + mention_1.end_offset][-1]
+    start_piece_2 = token_map[offset_2 + mention_2.start_offset][0]
+    end_piece_2 = token_map[offset_2 + mention_2.end_offset][-1]
     label = [1.0] if mention_1.gold_tag == mention_2.gold_tag else [0.0]
     record = {
         "sentence": tokens,
@@ -221,9 +231,8 @@ def find_cluster_key(node, clusters):
 
 
 def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
-    return True
     score = 0.0
-    sample_size = 10
+    sample_size = 50
     if len(cluster_1) > sample_size:
         c_1 = random.sample(cluster_1, sample_size)
     else:
@@ -256,10 +265,11 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
                              start_pieces_2, end_pieces_2, labels)
             mean_prob = torch.mean(out_dict["probabilities"]).item()
             score += mean_prob
-    return (score / len(cluster_1)) >= 0.5
+    return (score / len(cluster_1)) >= 0.75
 
 
-def transitive_closure_merge(edges, mentions, model, doc_dict):
+def transitive_closure_merge(edges, mentions, model, doc_dict, graph,
+                             graph_render):
     clusters = {}
     inv_clusters = {}
     mentions = {mention.mention_id: mention for mention in mentions}
@@ -280,12 +290,28 @@ def transitive_closure_merge(edges, mentions, model, doc_dict):
             perform_merge = is_cluster_merge(clusters[cluster_key],
                                              clusters[alt_key], mentions,
                                              model, doc_dict)
+        elif clusters[cluster_key] != set():
+            new_elements = set([edge[0], edge[1]]) - clusters[cluster_key]
+            if len(new_elements) > 0:
+                perform_merge = is_cluster_merge(clusters[cluster_key],
+                                                 new_elements, mentions, model,
+                                                 doc_dict)
         if alt_key and perform_merge:
             clusters[cluster_key] = clusters[cluster_key] | clusters[alt_key]
             for node in clusters[alt_key]:
                 inv_clusters[node] = cluster_key
             del clusters[alt_key]
         if perform_merge:
+            if not (graph.has_edge(edge[0], edge[1])
+                    or graph.has_edge(edge[1], edge[0])):
+                graph.add_edge(edge[0], edge[1])
+                color = 'black'
+                if edge[2] != 1.0:
+                    color = 'red'
+                graph_render.edge(edge[0],
+                                  edge[1],
+                                  color=color,
+                                  label=str(edge[3]))
             cluster = clusters[cluster_key]
             cluster.add(edge[0])
             cluster.add(edge[1])
@@ -319,15 +345,17 @@ def evaluate(model, encoder_model, dev_dataloader, dev_pairs, doc_dict,
             prediction = predictions[p_index]
             mentions.add(pair_0)
             mentions.add(pair_1)
-            if probs[p_index][0] > 0.9:
+            if probs[p_index][0] > 0.5:
                 if pair_0.mention_id not in best_edges or (
                         probs[p_index][0] > best_edges[pair_0.mention_id][3]):
                     best_edges[pair_0.mention_id] = (pair_0.mention_id,
                                                      pair_1.mention_id,
                                                      labels[p_index][0],
                                                      probs[p_index][0])
-        for item in best_edges:
-            edges.add(best_edges[item])
+                edges.add((pair_0.mention_id, pair_1.mention_id,
+                           labels[p_index][0], probs[p_index][0]))
+        #for item in best_edges:
+        #    edges.add(best_edges[item])
 
         offset += len(predictions)
 
@@ -337,6 +365,7 @@ def evaluate(model, encoder_model, dev_dataloader, dev_pairs, doc_dict,
 
 
 def eval_edges(edges, mentions, model, doc_dict):
+    print(len(mentions))
     global best_score
     dot = Graph(comment='Cross Doc Co-ref')
     G = nx.Graph()
@@ -344,19 +373,11 @@ def eval_edges(edges, mentions, model, doc_dict):
     for mention in mentions:
         G.add_node(mention.mention_id)
         dot.node(mention.mention_id, label=str(mention))
-    for edge in edges:
-        if (G.has_edge(edge[0], edge[1]) or G.has_edge(edge[1], edge[0])):
-            continue
-        G.add_edge(edge[0], edge[1])
-        color = 'black'
-        if edge[2] != 1.0:
-            color = 'red'
-        dot.edge(edge[0], edge[1], color=color, label=str(edge[3]))
     bridges = list(nx.bridges(G))
     articulation_points = list(nx.articulation_points(G))
     #edges = [edge for edge in edges if edge not in bridges]
     clusters, inv_clusters = transitive_closure_merge(edges, mentions, model,
-                                                      doc_dict)
+                                                      doc_dict, G, dot)
 
     # Find Transitive Closure Clusters
     gold_sets = []
@@ -397,15 +418,15 @@ def train_model(train_set, dev_set):
     train_event_pairs, _, _ = structure_dataset(train_set,
                                                 event_encoder,
                                                 events=True,
-                                                k=10,
+                                                k=5,
                                                 is_train=True)
     dev_event_pairs, dev_pairs, dev_docs = structure_dataset(dev_set,
                                                              event_encoder,
                                                              events=True,
-                                                             k=10)
+                                                             k=5)
     optimizer = get_optimizer(model)
     scheduler = get_scheduler(optimizer, len(train_event_pairs))
-    train_sampler = RandomSampler(train_event_pairs)
+    train_sampler = SequentialSampler(train_event_pairs)
     train_dataloader = DataLoader(train_event_pairs,
                                   sampler=train_sampler,
                                   batch_size=config_dict["batch_size"])
@@ -464,8 +485,8 @@ def main():
     if not args.evaluate_dev:
         train_model(training_data, dev_data)
     else:
-        #with open(config_dict["test_path"], 'rb') as f:
-        #    dev_data = cPickle.load(f)
+        with open(config_dict["test_path"], 'rb') as f:
+            dev_data = cPickle.load(f)
         device = torch.device("cuda:0" if args.use_cuda else "cpu")
         with open(config_dict["event_encoder_model"], 'rb') as f:
             params = torch.load(f)
