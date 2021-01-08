@@ -21,5 +21,5 @@
     "train_path": "feature_sets/all_sents/training_data",
     "test_path": "feature_sets/all_sents/test_data",
     "wd_entity_coref_file": "data/external/stanford_neural_wd_entity_coref_out/ecb_wd_coref.json",
-    "event_encoder_model": "models/multi_sent_biencoder_overnight/best_model"
+    "event_encoder_model": "models/multi_sent_biencoder_large_overnight/best_model"
 }

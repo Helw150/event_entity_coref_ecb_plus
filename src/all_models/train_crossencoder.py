@@ -117,7 +117,7 @@ def wd_comparisons(docs, events):
 
 
 def get_sents(sentences, sentence_id):
-    window = 2
+    window = 3
     lookback = max(0, sentence_id - window)
     lookforward = min(sentence_id + window, max(sentences.keys())) + 1
     return ([sentences[_id]
