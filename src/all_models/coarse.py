@@ -48,10 +48,13 @@ class EncoderCosineRanker(nn.Module):
 
     def update_cluster_lookup(self, label_sets, dev=False):
         cluster_lookup = {}
+        del self.cluster_lookup
+        self.cluster_lookup = {}
         index = faiss.IndexFlatIP(1536)
         with torch.no_grad():
             for label_id, label_records in tqdm(label_sets.items(),
                                                 desc="Exemplar Reps"):
+                label_records = label_records[:50]
                 assert (label_records[0]["label"] == [label_id])
                 sentences = torch.tensor(
                     [record["sentence"] for record in label_records])
