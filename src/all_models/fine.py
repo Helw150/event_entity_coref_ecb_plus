@@ -15,7 +15,8 @@ def get_raw_strings(sentences, mention_sentence, mapping=None):
     else:
         mapping = {}
     for i, sentence in enumerate(sentences):
-        raw_strings.append(sentence.get_raw_sentence())
+        raw_strings.append(' '.join(
+            [tok.replace(" ", "") for tok in sentence.get_tokens_strings()]))
         if i == mention_sentence:
             mention_offset = offset
         for _ in sentence.get_tokens_strings():

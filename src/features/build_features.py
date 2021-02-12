@@ -717,6 +717,65 @@ def combine_datasets(datasets):
     return combined
 
 
+def load_data(config_dict):
+    train_datasets = []
+    dev_datasets = []
+    test_datasets = []
+
+    logger.info('Loading event and entity mentions')
+    if "ECB" in config_dict["corpus"]:
+        train_datasets.append(
+            load_ecb_gold_data(config_dict["train_text_file"],
+                               config_dict["train_event_mentions"],
+                               config_dict["train_entity_mentions"]))
+        dev_datasets.append(
+            load_ecb_gold_data(config_dict["dev_text_file"],
+                               config_dict["dev_event_mentions"],
+                               config_dict["dev_entity_mentions"]))
+        test_datasets.append(
+            load_ecb_gold_data(config_dict["test_text_file"],
+                               config_dict["test_event_mentions"],
+                               config_dict["test_entity_mentions"]))
+
+    if "CD2CR" in config_dict["corpus"]:
+        train_datasets.append(load_CD2CR(config_dict["cd2cr_train"]))
+        dev_datasets.append(load_CD2CR(config_dict["cd2cr_dev"]))
+        test_datasets.append(load_CD2CR(config_dict["cd2cr_test"]))
+
+    if "GVC" in config_dict["corpus"]:
+        train_datasets.append(
+            load_GVC(config_dict["gvc_conll_file"],
+                     config_dict["gvc_topic_mapping"],
+                     config_dict["gvc_train_split"]))
+        dev_datasets.append(
+            load_GVC(config_dict["gvc_conll_file"],
+                     config_dict["gvc_topic_mapping"],
+                     config_dict["gvc_dev_split"]))
+        test_datasets.append(
+            load_GVC(config_dict["gvc_conll_file"],
+                     config_dict["gvc_topic_mapping"],
+                     config_dict["gvc_test_split"]))
+
+    if "FCC" in config_dict["corpus"]:
+        train_datasets.append(
+            load_fcc_gold_data(config_dict["fcc_train_tokens"],
+                               config_dict["fcc_train_docs"],
+                               config_dict["fcc_train_events"]))
+        dev_datasets.append(
+            load_fcc_gold_data(config_dict["fcc_dev_tokens"],
+                               config_dict["fcc_dev_docs"],
+                               config_dict["fcc_dev_events"]))
+        test_datasets.append(
+            load_fcc_gold_data(config_dict["fcc_test_tokens"],
+                               config_dict["fcc_test_docs"],
+                               config_dict["fcc_test_events"]))
+
+    training_data = combine_datasets(train_datasets)
+    dev_data = combine_datasets(dev_datasets)
+    test_data = combine_datasets(test_datasets)
+    return training_data, dev_data, test_data
+
+
 def main(args):
     """
         This script loads the train, dev and test json files (contain the gold entity and event
@@ -726,76 +785,7 @@ def main(args):
         Runs data processing scripts to turn intermediate data from (../intermid) into
         processed data ready to use in training and inference(saved in ../processed).
     """
-    if config_dict["corpus"] == "ECB":
-        logger.info('Training data - loading event and entity mentions')
-        training_data = load_ecb_gold_data(
-            config_dict["train_text_file"],
-            config_dict["train_event_mentions"],
-            config_dict["train_entity_mentions"])
-
-        logger.info('Dev data - Loading event and entity mentions ')
-        dev_data = load_ecb_gold_data(config_dict["dev_text_file"],
-                                      config_dict["dev_event_mentions"],
-                                      config_dict["dev_entity_mentions"])
-
-        logger.info('Test data - Loading event and entity mentions')
-        test_data = load_ecb_gold_data(config_dict["test_text_file"],
-                                       config_dict["test_event_mentions"],
-                                       config_dict["test_entity_mentions"])
-    elif config_dict["corpus"] == "GVC":
-        training_data = load_GVC(config_dict["gvc_conll_file"],
-                                 config_dict["gvc_topic_mapping"],
-                                 config_dict["gvc_train_split"])
-        dev_data = load_GVC(config_dict["gvc_conll_file"],
-                            config_dict["gvc_topic_mapping"],
-                            config_dict["gvc_dev_split"])
-        test_data = load_GVC(config_dict["gvc_conll_file"],
-                             config_dict["gvc_topic_mapping"],
-                             config_dict["gvc_test_split"])
-    elif config_dict["corpus"] == "FCC":
-        training_data = load_fcc_gold_data(config_dict["fcc_train_tokens"],
-                                           config_dict["fcc_train_docs"],
-                                           config_dict["fcc_train_events"])
-        dev_data = load_fcc_gold_data(config_dict["fcc_dev_tokens"],
-                                      config_dict["fcc_dev_docs"],
-                                      config_dict["fcc_dev_events"])
-        test_data = load_fcc_gold_data(config_dict["fcc_test_tokens"],
-                                       config_dict["fcc_test_docs"],
-                                       config_dict["fcc_test_events"])
-    elif config_dict["corpus"] == "ECB+GVC":
-        logger.info('Training data - loading event and entity mentions')
-        training_data = load_ecb_gold_data(
-            config_dict["train_text_file"],
-            config_dict["train_event_mentions"],
-            config_dict["train_entity_mentions"])
-        training_data = combine_datasets([
-            training_data,
-            load_GVC(config_dict["gvc_conll_file"],
-                     config_dict["gvc_topic_mapping"],
-                     config_dict["gvc_train_split"])
-        ])
-
-        logger.info('Dev data - Loading event and entity mentions ')
-        dev_data = load_ecb_gold_data(config_dict["dev_text_file"],
-                                      config_dict["dev_event_mentions"],
-                                      config_dict["dev_entity_mentions"])
-        dev_data = combine_datasets([
-            dev_data,
-            load_GVC(config_dict["gvc_conll_file"],
-                     config_dict["gvc_topic_mapping"],
-                     config_dict["gvc_dev_split"])
-        ])
-
-        logger.info('Test data - Loading event and entity mentions')
-        test_data = load_ecb_gold_data(config_dict["test_text_file"],
-                                       config_dict["test_event_mentions"],
-                                       config_dict["test_entity_mentions"])
-        test_data = combine_datasets([
-            test_data,
-            load_GVC(config_dict["gvc_conll_file"],
-                     config_dict["gvc_topic_mapping"],
-                     config_dict["gvc_test_split"])
-        ])
+    training_data, dev_data, test_data = load_data(config_dict)
 
     train_set = order_docs_by_topics(training_data)
     dev_set = order_docs_by_topics(dev_data)

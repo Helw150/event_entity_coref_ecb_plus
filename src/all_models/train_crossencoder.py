@@ -4,6 +4,7 @@ import json
 import random
 import logging
 import argparse
+import traceback
 from collections import defaultdict
 import numpy as np
 from tqdm import tqdm, trange
@@ -85,6 +86,8 @@ if args.use_cuda:
 
 tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 best_score = None
+patience = 0
+comparison_set = set()
 
 
 def all_positives(docs, events):
@@ -116,34 +119,49 @@ def wd_comparisons(docs, events):
     return pairs
 
 
-def get_sents(sentences, sentence_id):
-    window = 3
+def get_sents(sentences, sentence_id, window=config_dict["window_size"]):
     lookback = max(0, sentence_id - window)
     lookforward = min(sentence_id + window, max(sentences.keys())) + 1
     return ([sentences[_id]
              for _id in range(lookback, lookforward)], sentence_id - lookback)
 
 
-def structure_pair(mention_1, mention_2, doc_dict):
-    sents_1, sent_id_1 = get_sents(doc_dict[mention_1.doc_id].sentences,
-                                   mention_1.sent_id)
-    sents_2, sent_id_2 = get_sents(doc_dict[mention_2.doc_id].sentences,
-                                   mention_2.sent_id)
-    tokens, token_map, offset_1, offset_2 = tokenize_and_map_pair(
-        sents_1, sents_2, sent_id_1, sent_id_2, tokenizer)
-    start_piece_1 = token_map[offset_1 + mention_1.start_offset][0]
-    end_piece_1 = token_map[offset_1 + mention_1.end_offset][-1]
-    start_piece_2 = token_map[offset_2 + mention_2.start_offset][0]
-    end_piece_2 = token_map[offset_2 + mention_2.end_offset][-1]
-    label = [1.0] if mention_1.gold_tag == mention_2.gold_tag else [0.0]
-    record = {
-        "sentence": tokens,
-        "label": label,
-        "start_piece_1": [start_piece_1],
-        "end_piece_1": [end_piece_1],
-        "start_piece_2": [start_piece_2],
-        "end_piece_2": [end_piece_2]
-    }
+def structure_pair(mention_1,
+                   mention_2,
+                   doc_dict,
+                   window=config_dict["window_size"]):
+    try:
+        sents_1, sent_id_1 = get_sents(doc_dict[mention_1.doc_id].sentences,
+                                       mention_1.sent_id, window)
+        sents_2, sent_id_2 = get_sents(doc_dict[mention_2.doc_id].sentences,
+                                       mention_2.sent_id, window)
+        tokens, token_map, offset_1, offset_2 = tokenize_and_map_pair(
+            sents_1, sents_2, sent_id_1, sent_id_2, tokenizer)
+        start_piece_1 = token_map[offset_1 + mention_1.start_offset][0]
+        if offset_1 + mention_1.end_offset in token_map:
+            end_piece_1 = token_map[offset_1 + mention_1.end_offset][-1]
+        else:
+            end_piece_1 = token_map[offset_1 + mention_1.start_offset][-1]
+        start_piece_2 = token_map[offset_2 + mention_2.start_offset][0]
+        if offset_2 + mention_2.end_offset in token_map:
+            end_piece_2 = token_map[offset_2 + mention_2.end_offset][-1]
+        else:
+            end_piece_2 = token_map[offset_2 + mention_2.start_offset][-1]
+        label = [1.0] if mention_1.gold_tag == mention_2.gold_tag else [0.0]
+        record = {
+            "sentence": tokens,
+            "label": label,
+            "start_piece_1": [start_piece_1],
+            "end_piece_1": [end_piece_1],
+            "start_piece_2": [start_piece_2],
+            "end_piece_2": [end_piece_2]
+        }
+    except:
+        if window > 0:
+            return structure_pair(mention_1, mention_2, doc_dict, window - 1)
+        else:
+            traceback.print_exc()
+            sys.exit()
     return record
 
 
@@ -161,7 +179,12 @@ def structure_dataset(data_set,
     docs = dataset_to_docs(data_set)
     if is_train:
         docs = docs[:int(len(docs) * 1)]
-    pairs = nn_generate_pairs(docs, encoder_model, k=k, is_train=is_train)
+    pairs = nn_generate_pairs(
+        docs,
+        encoder_model,
+        k=k,
+        events=events,
+        remove_singletons=config_dict["remove_singletons"])
     if config_dict["all_positives"] and is_train:
         pairs = pairs | all_positives(docs, events)
     if config_dict["add_wd_pairs"]:
@@ -231,8 +254,11 @@ def find_cluster_key(node, clusters):
 
 
 def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
+    if config_dict["oracle"]:
+        return True
     score = 0.0
-    sample_size = 50
+    sample_size = 20
+    global comparison_set
     if len(cluster_1) > sample_size:
         c_1 = random.sample(cluster_1, sample_size)
     else:
@@ -245,6 +271,8 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
         records = []
         mention_1 = mentions[mention_id_1]
         for mention_id_2 in c_2:
+            comparison_set = comparison_set | set(
+                [frozenset([mention_id_1, mention_id_2])])
             mention_2 = mentions[mention_id_2]
             record = structure_pair(mention_1, mention_2, doc_dict)
             records.append(record)
@@ -265,7 +293,7 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
                              start_pieces_2, end_pieces_2, labels)
             mean_prob = torch.mean(out_dict["probabilities"]).item()
             score += mean_prob
-    return (score / len(cluster_1)) >= 0.75
+    return (score / len(cluster_1)) >= 0.5
 
 
 def transitive_closure_merge(edges, mentions, model, doc_dict, graph,
@@ -317,12 +345,13 @@ def transitive_closure_merge(edges, mentions, model, doc_dict, graph,
             cluster.add(edge[1])
             inv_clusters[edge[0]] = cluster_key
             inv_clusters[edge[1]] = cluster_key
+    print(len(comparison_set))
     return clusters, inv_clusters
 
 
 def evaluate(model, encoder_model, dev_dataloader, dev_pairs, doc_dict,
              epoch_num):
-    global best_score
+    global best_score, comparison_set
     model = model.eval()
     offset = 0
     edges = set()
@@ -333,18 +362,26 @@ def evaluate(model, encoder_model, dev_dataloader, dev_pairs, doc_dict,
     for step, batch in enumerate(tqdm(dev_dataloader, desc="Test Batch")):
         batch = tuple(t.to(model.device) for t in batch)
         sentences, start_pieces_1, end_pieces_1, start_pieces_2, end_pieces_2, labels = batch
-        with torch.no_grad():
-            out_dict = model(sentences, start_pieces_1, end_pieces_1,
-                             start_pieces_2, end_pieces_2, labels)
+        if not config_dict["oracle"]:
+            with torch.no_grad():
+                out_dict = model(sentences, start_pieces_1, end_pieces_1,
+                                 start_pieces_2, end_pieces_2, labels)
+        else:
+            out_dict = {
+                "accuracy": 1.0,
+                "predictions": labels,
+                "probabilities": labels
+            }
         acc_sum += out_dict["accuracy"]
         predictions = out_dict["predictions"].detach().cpu().tolist()
         probs = out_dict["probabilities"].detach().cpu().tolist()
-        labels = labels.detach().cpu().tolist()
         for p_index in range(len(predictions)):
             pair_0, pair_1 = dev_pairs[offset + p_index]
             prediction = predictions[p_index]
             mentions.add(pair_0)
             mentions.add(pair_1)
+            comparison_set = comparison_set | set(
+                [frozenset([pair_0.mention_id, pair_1.mention_id])])
             if probs[p_index][0] > 0.5:
                 if pair_0.mention_id not in best_edges or (
                         probs[p_index][0] > best_edges[pair_0.mention_id][3]):
@@ -366,13 +403,15 @@ def evaluate(model, encoder_model, dev_dataloader, dev_pairs, doc_dict,
 
 def eval_edges(edges, mentions, model, doc_dict):
     print(len(mentions))
-    global best_score
+    global best_score, patience
     dot = Graph(comment='Cross Doc Co-ref')
     G = nx.Graph()
     edges = sorted(edges, key=lambda x: -1 * x[3])
     for mention in mentions:
         G.add_node(mention.mention_id)
-        dot.node(mention.mention_id, label=str(mention))
+        dot.node(mention.mention_id,
+                 label=str((str(mention), doc_dict[mention.doc_id].sentences[
+                     mention.sent_id].get_raw_sentence())))
     bridges = list(nx.bridges(G))
     articulation_points = list(nx.articulation_points(G))
     #edges = [edge for edge in edges if edge not in bridges]
@@ -393,11 +432,17 @@ def eval_edges(edges, mentions, model, doc_dict):
     if best_score == None or f1 > best_score:
         tqdm.write("F1 Improved Saving Model")
         best_score = f1
+        patience = 0
         if not args.evaluate_dev:
             torch.save(model.state_dict(),
                        os.path.join(args.out_dir, 'best_model'))
         else:
             dot.render('/home/ubuntu/clustering')
+    else:
+        patience += 1
+        if patience > config_dict["early_stop_patience"]:
+            print("Early Stopping")
+            sys.exit()
 
 
 def train_model(train_set, dev_set):
@@ -417,13 +462,11 @@ def train_model(train_set, dev_set):
             model.load_state_dict(params)
     train_event_pairs, _, _ = structure_dataset(train_set,
                                                 event_encoder,
-                                                events=True,
+                                                events=config_dict["events"],
                                                 k=5,
                                                 is_train=True)
-    dev_event_pairs, dev_pairs, dev_docs = structure_dataset(dev_set,
-                                                             event_encoder,
-                                                             events=True,
-                                                             k=5)
+    dev_event_pairs, dev_pairs, dev_docs = structure_dataset(
+        dev_set, event_encoder, events=config_dict["events"], k=5)
     optimizer = get_optimizer(model)
     scheduler = get_scheduler(optimizer, len(train_event_pairs))
     train_sampler = SequentialSampler(train_event_pairs)
@@ -476,17 +519,27 @@ def train_model(train_set, dev_set):
 
 def main():
     logging.info('Loading training and dev data...')
-    with open(config_dict["train_path"], 'rb') as f:
-        training_data = cPickle.load(f)
-    with open(config_dict["dev_path"], 'rb') as f:
-        dev_data = cPickle.load(f)
 
     logging.info('Training and dev data have been loaded.')
     if not args.evaluate_dev:
+        with open(config_dict["train_path"], 'rb') as f:
+            training_data = cPickle.load(f)
+        with open(config_dict["dev_path"], 'rb') as f:
+            dev_data = cPickle.load(f)
         train_model(training_data, dev_data)
     else:
         with open(config_dict["test_path"], 'rb') as f:
             dev_data = cPickle.load(f)
+        topic_sizes = [
+            len([
+                mention for key, doc in topic.docs.items()
+                for sent_id, sent in doc.get_sentences().items()
+                for mention in sent.gold_event_mentions
+            ]) for topic in dev_data.topics.values()
+        ]
+        print(topic_sizes)
+        print(sum(topic_sizes))
+        print(sum([size * size for size in topic_sizes]))
         device = torch.device("cuda:0" if args.use_cuda else "cpu")
         with open(config_dict["event_encoder_model"], 'rb') as f:
             params = torch.load(f)
@@ -500,10 +553,8 @@ def main():
             model.load_state_dict(params)
             model = model.to(device).eval()
             model.requires_grad = False
-        dev_event_pairs, dev_pairs, dev_docs = structure_dataset(dev_data,
-                                                                 event_encoder,
-                                                                 events=True,
-                                                                 k=5)
+        dev_event_pairs, dev_pairs, dev_docs = structure_dataset(
+            dev_data, event_encoder, events=config_dict["events"], k=5)
         dev_sampler = SequentialSampler(dev_event_pairs)
         dev_dataloader = DataLoader(dev_event_pairs,
                                     sampler=dev_sampler,

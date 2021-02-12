@@ -151,13 +151,16 @@ def load_fcc_mentions(docs, events_file, topic_mapping):
             csv.reader([line]))
         mention_start, mention_end = (int(mention_start), int(mention_end))
         topic_id = topic_mapping[doc_id]
-        sents = docs[topic_id + "_" + doc_id].get_sentences()
+        sent_idx = int(sent_idx)
+        doc_id = topic_id + "_" + doc_id
+        sents = docs[doc_id].get_sentences()
         sent = sents[int(sent_idx)]
         mention_tokens = [
             token.token
-            for token in sent.get_tokens()[mention_start:mention_end + 1]
+            for token in sent.get_tokens()[mention_start:mention_end]
         ]
-        mention = EventMention(doc_id, sent_idx, (mention_start, mention_end),
+        mention = EventMention(doc_id, sent_idx,
+                               (mention_start, mention_end - 1),
                                mention_tokens, ' '.join(mention_tokens),
                                mention_tokens[0], mention_tokens[0], False,
                                False, event)
@@ -181,6 +184,71 @@ def gvc_mapping_from_csv(topic_mapping_file):
         doc_id, topic_id = line.strip().split(",")
         topic_mapping[doc_id] = topic_id
     return topic_mapping
+
+
+def load_CD2CR(split_file):
+    doc_changed = True
+    sent_changed = True
+    docs = {}
+    last_doc_name = None
+    last_sent_id = None
+    mention_start = None
+    mention_end = None
+    mention_tokens = None
+    in_mention = False
+
+    for line in open(split_file, 'r'):
+        stripped_line = line.strip()
+        if (stripped_line.startswith("#begin")
+                or stripped_line.startswith("#end")):
+            continue
+        if stripped_line:
+            topic, subtopic, doc_id, sent_id, token_idx, word, _, coref_chain = stripped_line.split(
+                '\t')
+            topic_id, domain, doc_id = doc_id.split("_")
+            word = clean_string(word).strip()
+            doc_id = topic_id + "_" + doc_id
+
+        if stripped_line and word:
+            if doc_id in docs:
+                new_doc = docs[doc_id]
+            else:
+                new_doc = Document(doc_id)
+                docs[doc_id] = new_doc
+
+            if last_sent_id is None:
+                last_sent_id = str(doc_id) + str(sent_id)
+            elif last_sent_id != str(doc_id) + str(sent_id):
+                sent_changed = True
+            if sent_changed:
+                sent_changed = False
+                last_sent_id = str(doc_id) + str(sent_id)
+                rel_sent_id = len(new_doc.get_sentences().values())
+                new_sent = Sentence(rel_sent_id)
+                new_doc.add_sentence(rel_sent_id, new_sent)
+            token_num = len(new_sent.get_tokens())
+            new_tok = Token(token_num, word, '-')
+            new_sent.add_token(new_tok)
+            if coref_chain[0] == "(":
+                mention_start = token_num
+                mention_tokens = []
+                in_mention = True
+                mention_start_sent = new_sent
+            if in_mention:
+                mention_tokens.append(word)
+            if coref_chain[-1] == ")":
+                mention_end = token_num
+                mention = EventMention(
+                    doc_id, mention_start_sent.sent_id,
+                    (mention_start, mention_end), mention_tokens,
+                    ' '.join(mention_tokens), mention_tokens[0],
+                    mention_tokens[0], False, False,
+                    coref_chain.replace("(", "").replace(")", ""))
+                mention_start_sent.add_gold_mention(mention, True)
+                in_mention = False
+                mention_start_sent = None
+
+    return docs
 
 
 def load_GVC(gvc_file, topic_mapping_file, split_file):

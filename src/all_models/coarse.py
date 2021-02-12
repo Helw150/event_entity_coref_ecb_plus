@@ -13,7 +13,8 @@ def tokenize_and_map(sentences, tokenizer, mention_sentence=0):
     raw_strings = []
     offset = 0
     for i, sentence in enumerate(sentences):
-        raw_strings.append(sentence.get_raw_sentence())
+        raw_strings.append(' '.join(
+            [tok.replace(" ", "") for tok in sentence.get_tokens_strings()]))
         if i == mention_sentence:
             mention_offset = offset
         for _ in sentence.get_tokens_strings():

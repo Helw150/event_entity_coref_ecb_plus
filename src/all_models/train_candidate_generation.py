@@ -4,6 +4,7 @@ import json
 import random
 import logging
 import argparse
+import traceback
 import numpy as np
 from tqdm import tqdm, trange
 from scorer import *
@@ -71,6 +72,58 @@ if args.use_cuda:
 
 tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 best_loss = None
+patience = 0
+
+
+def generate_records_for_sent(sentence_id,
+                              sentences,
+                              labels_triple,
+                              events,
+                              window=5):
+    labels_to_ids, label_sets, label_vocab_size = labels_triple
+    sentence = sentences[sentence_id]
+    sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
+    if len(sentence_mentions) == 0:
+        return ([], labels_triple)
+    try:
+        lookback = max(0, sentence_id - window)
+        lookforward = min(sentence_id + window, max(sentences.keys())) + 1
+        tokenization_input = ([
+            sentences[_id] for _id in range(lookback, lookforward)
+        ], sentence_id - lookback)
+        tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
+            tokenization_input[0], tokenizer, tokenization_input[1])
+        sentence_records = []
+        print(sentence_mentions[0].get_tokens())
+        for mention in sentence_mentions:
+            if mention.gold_tag not in labels_to_ids:
+                labels_to_ids[mention.gold_tag] = label_vocab_size
+                label_sets[label_vocab_size] = []
+                label_vocab_size += 1
+            label_id = labels_to_ids[mention.gold_tag]
+            start_piece = tokenization_mapping[sent_offset +
+                                               mention.start_offset][0]
+            end_piece = tokenization_mapping[sent_offset +
+                                             mention.end_offset][-1]
+            record = {
+                "sentence": tokenized_sentence,
+                "label": [label_id],
+                "start_piece": [start_piece],
+                "end_piece": [end_piece]
+            }
+            sentence_records.append(record)
+        return (sentence_records, (labels_to_ids, label_sets,
+                                   label_vocab_size))
+    except:
+        if window > 0:
+            return generate_records_for_sent(sentence_id,
+                                             sentences,
+                                             labels_triple,
+                                             events,
+                                             window=window - 1)
+        else:
+            traceback.print_exc()
+            sys.exit()
 
 
 def structure_dataset(data_set, events=True):
@@ -78,6 +131,7 @@ def structure_dataset(data_set, events=True):
     labels_to_ids = {}
     label_sets = {}
     label_vocab_size = 0
+    labels_triple = (labels_to_ids, label_sets, label_vocab_size)
     docs = [
         document for topic in data_set.topics.values()
         for document in topic.docs.values()
@@ -85,36 +139,13 @@ def structure_dataset(data_set, events=True):
     for doc in docs:
         sentences = doc.get_sentences()
         for sentence_id in sentences:
-            sentence = sentences[sentence_id]
-            sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
-            if len(sentence_mentions) == 0:
-                continue
-            lookback = max(0, sentence_id - 5)
-            lookforward = min(sentence_id + 5, max(sentences.keys())) + 1
-            tokenization_input = ([
-                sentences[_id] for _id in range(lookback, lookforward)
-            ], sentence_id - lookback)
-            tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
-                tokenization_input[0], tokenizer, tokenization_input[1])
-            for mention in sentence_mentions:
-                if mention.gold_tag not in labels_to_ids:
-                    labels_to_ids[mention.gold_tag] = label_vocab_size
-                    label_sets[label_vocab_size] = []
-                    label_vocab_size += 1
-                label_id = labels_to_ids[mention.gold_tag]
-                start_piece = tokenization_mapping[sent_offset +
-                                                   mention.start_offset][0]
-                end_piece = tokenization_mapping[sent_offset +
-                                                 mention.end_offset][-1]
-                record = {
-                    "sentence": tokenized_sentence,
-                    "label": [label_id],
-                    "start_piece": [start_piece],
-                    "end_piece": [end_piece]
-                }
+            sentence_records, labels_triple = generate_records_for_sent(
+                sentence_id, sentences, labels_triple, events)
+            for record in sentence_records:
+                label_id = record["label"][0]
                 processed_dataset.append(record)
                 label_sets[label_id].append(record)
-
+    labels_to_ids, label_sets, label_vocab_size = labels_triple
     sentences = torch.tensor(
         [record["sentence"] for record in processed_dataset])
     labels = torch.tensor([record["label"] for record in processed_dataset])
@@ -163,17 +194,23 @@ def get_scheduler(optimizer, len_train_data):
 
 def evaluate(model, dev_data, dev_raw, dev_event_gold, epoch_num):
     model.eval()
-    global best_loss
+    global best_loss, patience
     recall, mrr, maP, p_at_k = nn_eval(dev_raw, model)
     loss_based = False
     tqdm.write("Recall: {:.6f} - MRR: {:.6f} - MAP: {:.6f}".format(
         recall, mrr, maP))
     if not loss_based:
         if best_loss == None or recall > best_loss:
+            patience = 0
             tqdm.write("Recall Improved Saving Model")
             best_loss = recall
             torch.save(model.state_dict(),
                        os.path.join(args.out_dir, 'best_model'))
+        else:
+            patience += 1
+            if patience >= config_dict["early_stop_patience"]:
+                print("Early Stopping")
+                sys.exit()
         return
     with torch.no_grad():
         model.update_cluster_lookup(dev_event_gold, dev=True)
@@ -212,11 +249,11 @@ def train_model(train_set, dev_set):
     device = torch.device("cuda:0" if args.use_cuda else "cpu")
     model = EncoderCosineRanker(device)
     model.to(device)
-    train_event_mentions, train_event_gold = structure_dataset(train_set,
-                                                               events=True)
+    train_event_mentions, train_event_gold = structure_dataset(
+        train_set, events=config_dict["events"])
     #train_entity_mentions, train_entity_gold = structure_dataset(train_set, events = False)
-    dev_event_mentions, dev_event_gold = structure_dataset(dev_set,
-                                                           events=True)
+    dev_event_mentions, dev_event_gold = structure_dataset(
+        dev_set, events=config_dict["events"])
     #dev_entity_mentions, dev_entity_gold = structure_dataset(dev_set, events = False)
     optimizer = get_optimizer(model)
     scheduler = get_scheduler(optimizer, len(train_event_mentions))

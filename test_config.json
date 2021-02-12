@@ -1,7 +1,8 @@
-{"test_path":"data/processed/cybulska_setup/full_swirl_ecb/test_data",
-
-  "cd_event_model_path": "models/cybulska_setup/cd_event_best_model",
-  "cd_entity_model_path": "models/cybulska_setup/cd_entity_best_model",
+{ "test_path": "barhom/processed/full_swirl_ecb/test_data",
+  "test_path_topics" : "feature_sets/all_sents/test_data",
+  
+  "cd_event_model_path": "barhom/cd_event_best_model",
+  "cd_entity_model_path": "barhom/cd_entity_best_model",
 
   "gpu_num": 0,
   "event_merge_threshold": 0.5,
@@ -15,6 +16,7 @@
   "merge_iters": 2,
 
   "load_predicted_topics": true,
+  "event_encoder_model": "ablation_models/biencoder/best_model",
   "predicted_topics_path": "data/external/document_clustering/predicted_topics",
 
   "seed": 1,
@@ -22,5 +24,5 @@
 
   "event_gold_file_path": "data/gold/cybulska_gold/CD_test_event_mention_based.key_conll",
   "entity_gold_file_path": "data/gold/cybulska_gold/CD_test_entity_mention_based.key_conll"
-
+  
 }

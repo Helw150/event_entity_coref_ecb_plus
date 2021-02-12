@@ -25,11 +25,32 @@ def dataset_to_docs(dataset):
     return docs
 
 
-def build_mention_reps(docs, model, events=True):
+def generate_singleton_set(docs):
+    clusters = {}
+    for doc in docs:
+        sentences = doc.get_sentences()
+        for sentence_id in sentences:
+            for mention in sentences[sentence_id].gold_event_mentions:
+                if mention.gold_tag not in clusters:
+                    clusters[mention.gold_tag] = [mention.mention_id]
+                else:
+                    clusters[mention.gold_tag].append(mention.mention_id)
+    singletons = [
+        mention for cluster_id in clusters for mention in clusters[cluster_id]
+        if len(clusters[cluster_id]) == 1
+    ]
+    return set(singletons)
+
+
+def build_mention_reps(docs, model, events=True, remove_singletons=False):
     processed_dataset = []
     labels = []
     mentions = []
     label_vocab_size = 0
+    singleton_set = set()
+    if remove_singletons:
+        singleton_set = generate_singleton_set(docs)
+    print(len(singleton_set))
     for doc in docs:
         sentences = doc.get_sentences()
         for sentence_id in sentences:
@@ -47,6 +68,8 @@ def build_mention_reps(docs, model, events=True):
             sentence_vec = model.get_sentence_vecs(
                 torch.tensor([tokenized_sentence]).to(model.device))
             for mention in sentence_mentions:
+                if remove_singletons and mention in singleton_set:
+                    continue
                 start_piece = torch.tensor([[
                     tokenization_mapping[sent_offset + mention.start_offset][0]
                 ]])
@@ -147,8 +170,9 @@ def create_mention_index(docs, model):
     return index
 
 
-def nn_generate_pairs(data, model, k=10, is_train=False):
-    vectors, labels, mentions = build_mention_reps(data, model)
+def nn_generate_pairs(data, model, k=10, events=True, remove_singletons=False):
+    vectors, labels, mentions = build_mention_reps(
+        data, model, events, remove_singletons=remove_singletons)
     index = faiss.IndexFlatIP(1536)
     index.add(vectors)
     D, I = index.search(vectors, k + 1)

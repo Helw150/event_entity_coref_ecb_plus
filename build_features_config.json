@@ -23,8 +23,12 @@
 
   "load_predicted_mentions": false,
   "load_elmo": false,
-  "corpus" : "FCC",
+  "corpus" : "CD2CR",
 
+  "cd2cr_train" : "data/raw/cd2cr/train.conll",
+  "cd2cr_dev" : "data/raw/cd2cr/dev.conll",
+  "cd2cr_test" : "data/raw/cd2cr/test.conll",
+    
   "gvc_conll_file":"data/raw/gvc/gold.conll",
   "gvc_train_split":"data/raw/gvc/train.csv",
   "gvc_dev_split":"data/raw/gvc/dev.csv",

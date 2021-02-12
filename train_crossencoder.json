@@ -1,9 +1,9 @@
 {
     "batch_size": 2,
     "accumulated_batch_size": 8,
-    "epochs": 100,
+    "epochs": 20,
     "warmup_proportion" : 0.1,
-    "early_stop_patience": 7,
+    "early_stop_patience": 5,
     "gpu_num": 0,
     "max_grad_norm" : 1.0,
     
@@ -17,9 +17,12 @@
 
     "add_wd_pairs": false,
     "all_positives": false,
-    "dev_path": "feature_sets/all_sents/dev_data",
-    "train_path": "feature_sets/all_sents/training_data",
-    "test_path": "feature_sets/all_sents/test_data",
+    "oracle" : false,
+    "remove_singletons": true,
+    "window_size" : 3,
+    "dev_path": "feature_sets/cd2cr/dev_data",
+    "train_path": "feature_sets/cd2cr/training_data",
+    "test_path": "feature_sets/cd2cr/test_data",
     "wd_entity_coref_file": "data/external/stanford_neural_wd_entity_coref_out/ecb_wd_coref.json",
-    "event_encoder_model": "models/multi_sent_biencoder_large_overnight/best_model"
+    "event_encoder_model": "cd2cr_models/biencoder/best_model"
 }

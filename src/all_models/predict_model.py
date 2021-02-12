@@ -14,13 +14,18 @@ sys.path.append("/src/shared/")
 import _pickle as cPickle
 import logging
 import argparse
-
+from coarse import *
+import copy
+from nearest_neighbor import nn_generate_pairs, dataset_to_docs
+import networkx as nx
 
 parser = argparse.ArgumentParser(description='Testing the regressors')
 
-parser.add_argument('--config_path', type=str,
+parser.add_argument('--config_path',
+                    type=str,
                     help=' The path configuration json file')
-parser.add_argument('--out_dir', type=str,
+parser.add_argument('--out_dir',
+                    type=str,
                     help=' The directory to the output folder')
 
 args = parser.parse_args()
@@ -30,21 +35,22 @@ if not os.path.exists(out_dir):
     os.makedirs(out_dir)
 
 logging.basicConfig(filename=os.path.join(args.out_dir, "test_log.txt"),
-                    level=logging.INFO, filemode="w")
+                    level=logging.INFO,
+                    filemode="w")
 
 # Loads a json configuration file (test_config.json)
 with open(args.config_path, 'r') as js_file:
     config_dict = json.load(js_file)
 
 # Saves a json configuration file (test_config.json) in the experiment folder
-with open(os.path.join(args.out_dir,'test_config.json'), "w") as js_file:
+with open(os.path.join(args.out_dir, 'test_config.json'), "w") as js_file:
     json.dump(config_dict, js_file, indent=4, sort_keys=True)
 
 random.seed(config_dict["random_seed"])
 np.random.seed(config_dict["random_seed"])
 
 if config_dict["gpu_num"] != -1:
-    os.environ["CUDA_VISIBLE_DEVICES"]= str(config_dict["gpu_num"])
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(config_dict["gpu_num"])
     args.use_cuda = True
 else:
     args.use_cuda = False
@@ -65,6 +71,7 @@ from classes import *
 from eval_utils import *
 from model_utils import *
 
+
 def read_conll_f1(filename):
     '''
     This function reads the results of the CoNLL scorer , extracts the F1 measures of the MUS,
@@ -83,25 +90,33 @@ def read_conll_f1(filename):
     bcued_f1 = f1_list[3]
     ceafe_f1 = f1_list[7]
 
-    return (muc_f1 + bcued_f1 + ceafe_f1)/float(3)
+    return (muc_f1 + bcued_f1 + ceafe_f1) / float(3)
 
 
 def run_conll_scorer():
     if config_dict["test_use_gold_mentions"]:
-        event_response_filename = os.path.join(args.out_dir, 'CD_test_event_mention_based.response_conll')
-        entity_response_filename = os.path.join(args.out_dir, 'CD_test_entity_mention_based.response_conll')
+        event_response_filename = os.path.join(
+            args.out_dir, 'CD_test_event_mention_based.response_conll')
+        entity_response_filename = os.path.join(
+            args.out_dir, 'CD_test_entity_mention_based.response_conll')
     else:
-        event_response_filename = os.path.join(args.out_dir, 'CD_test_event_span_based.response_conll')
-        entity_response_filename = os.path.join(args.out_dir, 'CD_test_entity_span_based.response_conll')
+        event_response_filename = os.path.join(
+            args.out_dir, 'CD_test_event_span_based.response_conll')
+        entity_response_filename = os.path.join(
+            args.out_dir, 'CD_test_entity_span_based.response_conll')
 
-    event_conll_file = os.path.join(args.out_dir,'event_scorer_cd_out.txt')
-    entity_conll_file = os.path.join(args.out_dir,'entity_scorer_cd_out.txt')
+    event_conll_file = os.path.join(args.out_dir, 'event_scorer_cd_out.txt')
+    entity_conll_file = os.path.join(args.out_dir, 'entity_scorer_cd_out.txt')
 
-    event_scorer_command = ('perl scorer/scorer.pl all {} {} none > {} \n'.format
-            (config_dict["event_gold_file_path"], event_response_filename, event_conll_file))
+    event_scorer_command = (
+        'perl scorer/scorer.pl all {} {} none > {} \n'.format(
+            config_dict["event_gold_file_path"], event_response_filename,
+            event_conll_file))
 
-    entity_scorer_command = ('perl scorer/scorer.pl all {} {} none > {} \n'.format
-            (config_dict["entity_gold_file_path"], entity_response_filename, entity_conll_file))
+    entity_scorer_command = (
+        'perl scorer/scorer.pl all {} {} none > {} \n'.format(
+            config_dict["entity_gold_file_path"], entity_response_filename,
+            entity_conll_file))
 
     processes = []
     print('Run scorer command for cross-document event coreference')
@@ -115,8 +130,8 @@ def run_conll_scorer():
         if status is not None:
             processes.pop(0)
 
-    print ('Running scorers has been done.')
-    print ('Save results...')
+    print('Running scorers has been done.')
+    print('Save results...')
 
     scores_file = open(os.path.join(args.out_dir, 'conll_f1_scores.txt'), 'w')
 
@@ -142,9 +157,34 @@ def test_model(test_set):
     cd_entity_model.to(device)
 
     doc_to_entity_mentions = load_entity_wd_clusters(config_dict)
+    # with open(config_dict["event_encoder_model"], 'rb') as f:
+    #     params = torch.load(f)
+    #     encoder_model = EncoderCosineRanker(device)
+    #     encoder_model.load_state_dict(params)
+    #     encoder_model = encoder_model.to(device).eval()
+    #     encoder_model.requires_grad = False
+    # with open(config_dict["test_path_topics"], 'rb') as f:
+    #     encoding_data = cPickle.load(f)
 
-    _,_ = test_models(test_set, cd_event_model, cd_entity_model, device, config_dict, write_clusters=True, out_dir=args.out_dir,
-                      doc_to_entity_mentions=doc_to_entity_mentions,analyze_scores=True)
+    # docs = dataset_to_docs(encoding_data)
+    # pairs = nn_generate_pairs(docs, encoder_model, k=5, events=True)
+    # pairs = pairs | nn_generate_pairs(docs, encoder_model, k=5, events=False)
+    # valid_pairs = [[mention.mention_id for mention in pair] for pair in pairs]
+    # with open("valid_pairs", 'wb') as fp:
+    #     cPickle.dump(valid_pairs, fp)
+    with open("valid_pairs", 'rb') as fp:
+        valid_pairs = cPickle.load(fp)
+
+    _, _ = test_models(test_set,
+                       cd_event_model,
+                       cd_entity_model,
+                       device,
+                       config_dict,
+                       write_clusters=True,
+                       out_dir=args.out_dir,
+                       doc_to_entity_mentions=doc_to_entity_mentions,
+                       analyze_scores=True,
+                       valid_pairs=valid_pairs)
 
     run_conll_scorer()
 
