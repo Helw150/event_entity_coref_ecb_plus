@@ -1,0 +1,29 @@
+{
+    "batch_size": 2,
+    "accumulated_batch_size": 8,
+    "epochs": 20,
+    "warmup_proportion" : 0.1,
+    "early_stop_patience": 5,
+    "gpu_num": 0,
+    "max_grad_norm" : 1.0,
+    
+    "lr": 0.00001,
+    "momentum": 0,
+    "weight_decay": 0,
+    "optimizer": "adam",
+
+    "random_seed": 2048,
+    "seed": 1,
+
+    "add_wd_pairs": false,
+    "all_positives": false,
+    "oracle" : false,
+    "window_size" : 3,
+    
+    "remove_singletons": false,
+    "events" : true,
+    "dev_path": "feature_sets/ecb+fcc/dev_data",
+    "train_path": "feature_sets/ecb+fcc/training_data",
+    "test_path": "feature_sets/ecb+fcc/test_data",
+    "event_encoder_model": "ecb+fcc_models/biencoder/best_model"
+}

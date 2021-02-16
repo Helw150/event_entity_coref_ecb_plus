@@ -15,7 +15,7 @@
     "random_seed": 2048,
     "seed": 1,
     
-    "events" : false,
+    "events" : true,
     "dev_path": "feature_sets/ecb+gvc+fcc/dev_data",
     "train_path": "feature_sets/ecb+gvc+fcc/training_data"
 }
