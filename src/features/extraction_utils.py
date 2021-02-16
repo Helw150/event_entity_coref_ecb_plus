@@ -238,12 +238,12 @@ def load_CD2CR(split_file):
                 mention_tokens.append(word)
             if coref_chain[-1] == ")":
                 mention_end = token_num
-                mention = EventMention(
+                mention = EntityMention(
                     doc_id, mention_start_sent.sent_id,
                     (mention_start, mention_end), mention_tokens,
                     ' '.join(mention_tokens), mention_tokens[0],
                     mention_tokens[0], False, False,
-                    coref_chain.replace("(", "").replace(")", ""))
+                    coref_chain.replace("(", "").replace(")", ""), "N/A")
                 mention_start_sent.add_gold_mention(mention, True)
                 in_mention = False
                 mention_start_sent = None
