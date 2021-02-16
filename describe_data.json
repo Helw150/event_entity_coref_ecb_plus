@@ -1,0 +1,5 @@
+{
+    "dev_path": "feature_sets/all_sents/dev_data",
+    "test_path": "feature_sets/all_sents/test_data",
+    "train_path": "feature_sets/all_sents/training_data"
+}
