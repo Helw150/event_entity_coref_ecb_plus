@@ -8,13 +8,13 @@ import sys
 import torch
 from tqdm import tqdm
 import _pickle as cPickle
-from transformers import RobertaTokenizer
+from transformers import LongformerTokenizer
 
 for pack in os.listdir("src"):
     sys.path.append(os.path.join("src", pack))
 from classes import *
 
-tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
 
 def dataset_to_docs(dataset):
@@ -58,27 +58,27 @@ def build_mention_reps(docs, model, events=True, remove_singletons=False):
             sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
             if len(sentence_mentions) == 0:
                 continue
-            lookback = max(0, sentence_id - 5)
-            lookforward = min(sentence_id + 5, max(sentences.keys())) + 1
+            lookback = 0
+            lookforward = max(sentences.keys()) + 1
             tokenization_input = ([
                 sentences[_id] for _id in range(lookback, lookforward)
             ], sentence_id - lookback)
             tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
                 tokenization_input[0], tokenizer, tokenization_input[1])
-            sentence_vec = model.get_sentence_vecs(
-                torch.tensor([tokenized_sentence]).to(model.device))
             for mention in sentence_mentions:
                 if remove_singletons and mention in singleton_set:
                     continue
                 start_piece = torch.tensor([[
                     tokenization_mapping[sent_offset + mention.start_offset][0]
-                ]])
+                ]]).to(model.device)
                 end_piece = torch.tensor([[
                     tokenization_mapping[sent_offset + mention.end_offset][-1]
-                ]])
-                mention_rep = model.get_mention_rep(
-                    sentence_vec, start_piece.to(model.device),
-                    end_piece.to(model.device))
+                ]]).to(model.device)
+                sentence_vec = model.get_sentence_vecs(
+                    torch.tensor([tokenized_sentence]).to(model.device),
+                    start_piece, end_piece)
+                mention_rep = model.get_mention_rep(sentence_vec, start_piece,
+                                                    end_piece)
                 processed_dataset.append(mention_rep.detach().cpu().numpy()[0])
                 labels.append((mention.mention_str, mention.gold_tag))
                 mentions.append(mention)

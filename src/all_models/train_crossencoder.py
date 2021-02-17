@@ -70,7 +70,7 @@ from model_utils import load_entity_wd_clusters
 from bcubed_scorer import *
 from coarse import *
 from fine import *
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
+from transformers import LongformerTokenizer
 from transformers.optimization import get_linear_schedule_with_warmup
 
 # Fix the random seeds
@@ -84,7 +84,7 @@ if args.use_cuda:
     torch.backends.cudnn.benchmark = False
     print('Training with CUDA')
 
-tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 best_score = None
 patience = 0
 comparison_set = set()
@@ -119,22 +119,19 @@ def wd_comparisons(docs, events):
     return pairs
 
 
-def get_sents(sentences, sentence_id, window=config_dict["window_size"]):
-    lookback = max(0, sentence_id - window)
-    lookforward = min(sentence_id + window, max(sentences.keys())) + 1
+def get_sents(sentences, sentence_id):
+    lookback = 0
+    lookforward = max(sentences.keys()) + 1
     return ([sentences[_id]
              for _id in range(lookback, lookforward)], sentence_id - lookback)
 
 
-def structure_pair(mention_1,
-                   mention_2,
-                   doc_dict,
-                   window=config_dict["window_size"]):
+def structure_pair(mention_1, mention_2, doc_dict):
     try:
         sents_1, sent_id_1 = get_sents(doc_dict[mention_1.doc_id].sentences,
-                                       mention_1.sent_id, window)
+                                       mention_1.sent_id)
         sents_2, sent_id_2 = get_sents(doc_dict[mention_2.doc_id].sentences,
-                                       mention_2.sent_id, window)
+                                       mention_2.sent_id)
         tokens, token_map, offset_1, offset_2 = tokenize_and_map_pair(
             sents_1, sents_2, sent_id_1, sent_id_2, tokenizer)
         start_piece_1 = token_map[offset_1 + mention_1.start_offset][0]
@@ -157,11 +154,8 @@ def structure_pair(mention_1,
             "end_piece_2": [end_piece_2]
         }
     except:
-        if window > 0:
-            return structure_pair(mention_1, mention_2, doc_dict, window - 1)
-        else:
-            traceback.print_exc()
-            sys.exit()
+        traceback.print_exc()
+        sys.exit()
     return record
 
 
@@ -268,32 +262,34 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
     else:
         c_2 = cluster_2
     for mention_id_1 in c_1:
-        records = []
         mention_1 = mentions[mention_id_1]
         for mention_id_2 in c_2:
+            records = []
             comparison_set = comparison_set | set(
                 [frozenset([mention_id_1, mention_id_2])])
             mention_2 = mentions[mention_id_2]
             record = structure_pair(mention_1, mention_2, doc_dict)
             records.append(record)
-        sentences = torch.tensor([record["sentence"]
-                                  for record in records]).to(model.device)
-        labels = torch.tensor([record["label"]
-                               for record in records]).to(model.device)
-        start_pieces_1 = torch.tensor(
-            [record["start_piece_1"] for record in records]).to(model.device)
-        end_pieces_1 = torch.tensor(
-            [record["end_piece_1"] for record in records]).to(model.device)
-        start_pieces_2 = torch.tensor(
-            [record["start_piece_2"] for record in records]).to(model.device)
-        end_pieces_2 = torch.tensor(
-            [record["end_piece_2"] for record in records]).to(model.device)
-        with torch.no_grad():
-            out_dict = model(sentences, start_pieces_1, end_pieces_1,
-                             start_pieces_2, end_pieces_2, labels)
-            mean_prob = torch.mean(out_dict["probabilities"]).item()
-            score += mean_prob
-    return (score / len(cluster_1)) >= 0.5
+            sentences = torch.tensor(
+                [record["sentence"] for record in records]).to(model.device)
+            labels = torch.tensor([record["label"]
+                                   for record in records]).to(model.device)
+            start_pieces_1 = torch.tensor([
+                record["start_piece_1"] for record in records
+            ]).to(model.device)
+            end_pieces_1 = torch.tensor(
+                [record["end_piece_1"] for record in records]).to(model.device)
+            start_pieces_2 = torch.tensor([
+                record["start_piece_2"] for record in records
+            ]).to(model.device)
+            end_pieces_2 = torch.tensor(
+                [record["end_piece_2"] for record in records]).to(model.device)
+            with torch.no_grad():
+                out_dict = model(sentences, start_pieces_1, end_pieces_1,
+                                 start_pieces_2, end_pieces_2, labels)
+                mean_prob = torch.mean(out_dict["probabilities"]).item()
+                score += mean_prob
+    return (score / (len(c_1) * len(c_2))) >= 0.5
 
 
 def transitive_closure_merge(edges, mentions, model, doc_dict, graph,

@@ -57,7 +57,7 @@ args.use_cuda = args.use_cuda and torch.cuda.is_available()
 from classes import *
 from eval_utils import *
 from coarse import *
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
+from transformers import LongformerTokenizer
 from transformers.optimization import get_linear_schedule_with_warmup
 
 # Fix the random seeds
@@ -70,31 +70,26 @@ if args.use_cuda:
     torch.backends.cudnn.benchmark = False
     print('Training with CUDA')
 
-tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 best_loss = None
 patience = 0
 
 
-def generate_records_for_sent(sentence_id,
-                              sentences,
-                              labels_triple,
-                              events,
-                              window=5):
+def generate_records_for_sent(sentence_id, sentences, labels_triple, events):
     labels_to_ids, label_sets, label_vocab_size = labels_triple
     sentence = sentences[sentence_id]
     sentence_mentions = sentence.gold_event_mentions if events else sentence.gold_entity_mentions
     if len(sentence_mentions) == 0:
         return ([], labels_triple)
     try:
-        lookback = max(0, sentence_id - window)
-        lookforward = min(sentence_id + window, max(sentences.keys())) + 1
+        lookback = 0
+        lookforward = max(sentences.keys()) + 1
         tokenization_input = ([
             sentences[_id] for _id in range(lookback, lookforward)
         ], sentence_id - lookback)
         tokenized_sentence, tokenization_mapping, sent_offset = tokenize_and_map(
             tokenization_input[0], tokenizer, tokenization_input[1])
         sentence_records = []
-        print(sentence_mentions[0].get_tokens())
         for mention in sentence_mentions:
             if mention.gold_tag not in labels_to_ids:
                 labels_to_ids[mention.gold_tag] = label_vocab_size
@@ -115,15 +110,8 @@ def generate_records_for_sent(sentence_id,
         return (sentence_records, (labels_to_ids, label_sets,
                                    label_vocab_size))
     except:
-        if window > 0:
-            return generate_records_for_sent(sentence_id,
-                                             sentences,
-                                             labels_triple,
-                                             events,
-                                             window=window - 1)
-        else:
-            traceback.print_exc()
-            sys.exit()
+        traceback.print_exc()
+        sys.exit()
 
 
 def structure_dataset(data_set, events=True):

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
-from transformers import RobertaModel
+from transformers import LongformerModel
 from coarse import EncoderCosineRanker
 
 
@@ -27,7 +27,7 @@ def get_raw_strings(sentences, mention_sentence, mapping=None):
 
 def tokenize_and_map_pair(sentences_1, sentences_2, mention_sentence_1,
                           mention_sentence_2, tokenizer):
-    max_seq_length = 512
+    max_seq_length = 4096
     raw_strings_1, mention_offset_1, mapping = get_raw_strings(
         sentences_1, mention_sentence_1)
     raw_strings_2, mention_offset_2, mapping = get_raw_strings(
@@ -37,6 +37,8 @@ def tokenize_and_map_pair(sentences_1, sentences_2, mention_sentence_1,
                            max_length=max_seq_length,
                            truncation=True,
                            padding="max_length")["input_ids"]
+    if embeddings[-1] != 1:
+        print("Truncated")
     counter = 0
     new_tokens = tokenizer.convert_ids_to_tokens(embeddings)
     for i, token in enumerate(new_tokens):
@@ -116,8 +118,8 @@ class CoreferenceCrossEncoder(nn.Module):
         self.device = device
         self.pos_weight = torch.tensor([0.1]).to(device)
         self.model_type = 'CoreferenceCrossEncoder'
-        self.mention_model = RobertaModel.from_pretrained('roberta-large',
-                                                          return_dict=True)
+        self.mention_model = LongformerModel.from_pretrained(
+            'allenai/longformer-base-4096', return_dict=True)
         self.mention_dim = 1536
         self.input_dim = self.mention_dim * 3
         self.out_dim = 1
@@ -127,8 +129,21 @@ class CoreferenceCrossEncoder(nn.Module):
         self.hidden_layer_2 = nn.Linear(self.mention_dim, self.mention_dim)
         self.out_layer = nn.Linear(self.mention_dim, self.out_dim)
 
-    def get_sentence_vecs(self, sentences):
-        expected_transformer_input = self.to_transformer_input(sentences)
+    def get_sentence_vecs(
+            self,
+            sentences,
+            start_pieces_1,
+            end_pieces_1,
+            start_pieces_2,
+            end_pieces_2,
+    ):
+        expected_transformer_input = self.to_transformer_input(
+            sentences,
+            start_pieces_1,
+            end_pieces_1,
+            start_pieces_2,
+            end_pieces_2,
+        )
         transformer_output = self.mention_model(
             **expected_transformer_input).last_hidden_state
         return transformer_output
@@ -143,13 +158,35 @@ class CoreferenceCrossEncoder(nn.Module):
                                 dim=2).squeeze(1)
         return mention_rep
 
-    def to_transformer_input(self, sentence_tokens):
+    def to_transformer_input(
+            self,
+            sentence_tokens,
+            start_pieces_1,
+            end_pieces_1,
+            start_pieces_2,
+            end_pieces_2,
+    ):
         segment_idx = sentence_tokens * 0
         mask = sentence_tokens != 1
+        start_1_attention_mask = (torch.arange(
+            sentence_tokens.shape[1]).repeat(sentence_tokens.shape[0], 1).to(
+                self.device) == start_pieces_1)
+        end_1_attention_mask = (torch.arange(sentence_tokens.shape[1]).repeat(
+            sentence_tokens.shape[0], 1).to(self.device) == end_pieces_1)
+        start_2_attention_mask = (torch.arange(
+            sentence_tokens.shape[1]).repeat(sentence_tokens.shape[0], 1).to(
+                self.device) == start_pieces_2)
+        end_2_attention_mask = (torch.arange(sentence_tokens.shape[1]).repeat(
+            sentence_tokens.shape[0], 1).to(self.device) == end_pieces_2)
+        global_attention_mask = start_1_attention_mask | end_1_attention_mask
+        global_attention_mask = global_attention_mask | (
+            start_2_attention_mask | end_2_attention_mask)
+        print(torch.sum(global_attention_mask))
         return {
             "input_ids": sentence_tokens,
             "token_type_ids": segment_idx,
-            "attention_mask": mask
+            "attention_mask": mask,
+            "global_attention_mask": global_attention_mask
         }
 
     def forward(self,
@@ -159,7 +196,10 @@ class CoreferenceCrossEncoder(nn.Module):
                 start_pieces_2,
                 end_pieces_2,
                 labels=None):
-        transformer_output = self.get_sentence_vecs(sentences)
+        transformer_output = self.get_sentence_vecs(sentences, start_pieces_1,
+                                                    end_pieces_1,
+                                                    start_pieces_2,
+                                                    end_pieces_2)
         mention_reps_1 = self.get_mention_rep(transformer_output,
                                               start_pieces_1, end_pieces_1)
         mention_reps_2 = self.get_mention_rep(transformer_output,
