@@ -70,7 +70,7 @@ from model_utils import load_entity_wd_clusters
 from bcubed_scorer import *
 from coarse import *
 from fine import *
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
+from transformers import LongformerTokenizer
 from transformers.optimization import get_linear_schedule_with_warmup
 
 # Fix the random seeds
@@ -84,7 +84,9 @@ if args.use_cuda:
     torch.backends.cudnn.benchmark = False
     print('Training with CUDA')
 
-tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+tokenizer = LongformerTokenizer.from_pretrained("CDLM")
+tokenizer.sep_token = "</doc-s>"
+tokenizer.cls_token = "<doc-s>"
 best_score = None
 patience = 0
 comparison_set = set()
@@ -167,7 +169,7 @@ def structure_pair(mention_1,
 
 def structure_dataset(data_set,
                       encoder_model,
-                      events=True,
+                      events=config_dict["events"],
                       k=10,
                       is_train=False):
     processed_dataset = []
@@ -521,6 +523,7 @@ def main():
     logging.info('Loading training and dev data...')
 
     logging.info('Training and dev data have been loaded.')
+    print("Events = " + str(config_dict["events"]))
     if not args.evaluate_dev:
         with open(config_dict["train_path"], 'rb') as f:
             training_data = cPickle.load(f)
