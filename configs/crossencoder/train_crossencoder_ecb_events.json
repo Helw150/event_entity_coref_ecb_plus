@@ -1,5 +1,5 @@
 {
-    "batch_size": 1,
+    "batch_size": 2,
     "accumulated_batch_size": 8,
     "epochs": 20,
     "warmup_proportion" : 0.1,
