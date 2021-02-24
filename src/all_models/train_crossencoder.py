@@ -259,7 +259,7 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
     if config_dict["oracle"]:
         return True
     score = 0.0
-    sample_size = 20
+    sample_size = 50
     global comparison_set
     if len(cluster_1) > sample_size:
         c_1 = random.sample(cluster_1, sample_size)
@@ -295,7 +295,7 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
                              start_pieces_2, end_pieces_2, labels)
             mean_prob = torch.mean(out_dict["probabilities"]).item()
             score += mean_prob
-    return (score / len(cluster_1)) >= 0.5
+    return (score / len(cluster_1)) >= 0.75
 
 
 def transitive_closure_merge(edges, mentions, model, doc_dict, graph,

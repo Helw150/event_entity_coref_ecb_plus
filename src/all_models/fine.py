@@ -28,7 +28,7 @@ def get_raw_strings(sentences, mention_sentence, mapping=None):
 
 def tokenize_and_map_pair(sentences_1, sentences_2, mention_sentence_1,
                           mention_sentence_2, tokenizer):
-    max_seq_length = 2048
+    max_seq_length = 512
     raw_strings_1, mention_offset_1, mapping = get_raw_strings(
         sentences_1, mention_sentence_1)
     raw_strings_2, mention_offset_2, mapping = get_raw_strings(

@@ -18,7 +18,7 @@
     "add_wd_pairs": false,
     "all_positives": false,
     "oracle" : false,
-    "window_size" : 10,
+    "window_size" : 3,
     
     "remove_singletons": false,
     "events" : true,
