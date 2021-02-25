@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
-from transformers import RobertaModel
+from transformers import AutoModel
 from coarse import EncoderCosineRanker
 
 
@@ -32,23 +32,26 @@ def tokenize_and_map_pair(sentences_1, sentences_2, mention_sentence_1,
         sentences_1, mention_sentence_1)
     raw_strings_2, mention_offset_2, mapping = get_raw_strings(
         sentences_2, mention_sentence_2, mapping)
-    embeddings = tokenizer(' '.join(raw_strings_1),
-                           ' '.join(raw_strings_2),
-                           max_length=max_seq_length,
-                           truncation=True,
-                           padding="max_length")["input_ids"]
+    tokenizer_out = tokenizer(' '.join(raw_strings_1),
+                              ' '.join(raw_strings_2),
+                              max_length=max_seq_length,
+                              truncation=True,
+                              padding="max_length")
+    embeddings = tokenizer_out["input_ids"]
     counter = 0
     new_tokens = tokenizer.convert_ids_to_tokens(embeddings)
     for i, token in enumerate(new_tokens):
-        if token == "<s>" or token == "</s>" or token == "<pad>":
+        if token == "[CLS]" or token == "[SEP]" or token == "[PAD]":
             continue
-        elif token[0] == "Ġ" or new_tokens[i - 1] == "</s>":
+        elif tokenizer.convert_tokens_to_string(
+            [token])[0] == " " or new_tokens[i - 1] == "[SEP]":
             counter += 1
             mapping[counter].append(i)
         else:
             mapping[counter].append(i)
             continue
-    return embeddings, mapping, mention_offset_1, mention_offset_2
+    return embeddings, tokenizer_out[
+        'token_type_ids'], mapping, mention_offset_1, mention_offset_2
 
 
 class CoreferenceMetricLearner(nn.Module):
@@ -116,8 +119,8 @@ class CoreferenceCrossEncoder(nn.Module):
         self.device = device
         self.pos_weight = torch.tensor([0.1]).to(device)
         self.model_type = 'CoreferenceCrossEncoder'
-        self.mention_model = RobertaModel.from_pretrained('roberta-large',
-                                                          return_dict=True)
+        self.mention_model = AutoModel.from_pretrained(
+            'microsoft/deberta-large', return_dict=True)
         self.mention_dim = 1536
         self.input_dim = self.mention_dim * 3
         self.out_dim = 1
@@ -127,8 +130,9 @@ class CoreferenceCrossEncoder(nn.Module):
         self.hidden_layer_2 = nn.Linear(self.mention_dim, self.mention_dim)
         self.out_layer = nn.Linear(self.mention_dim, self.out_dim)
 
-    def get_sentence_vecs(self, sentences):
-        expected_transformer_input = self.to_transformer_input(sentences)
+    def get_sentence_vecs(self, sentences, segment_idx):
+        expected_transformer_input = self.to_transformer_input(
+            sentences, segment_idx)
         transformer_output = self.mention_model(
             **expected_transformer_input).last_hidden_state
         return transformer_output
@@ -143,9 +147,8 @@ class CoreferenceCrossEncoder(nn.Module):
                                 dim=2).squeeze(1)
         return mention_rep
 
-    def to_transformer_input(self, sentence_tokens):
-        segment_idx = sentence_tokens * 0
-        mask = sentence_tokens != 1
+    def to_transformer_input(self, sentence_tokens, segment_idx):
+        mask = sentence_tokens != 0
         return {
             "input_ids": sentence_tokens,
             "token_type_ids": segment_idx,
@@ -158,8 +161,9 @@ class CoreferenceCrossEncoder(nn.Module):
                 end_pieces_1,
                 start_pieces_2,
                 end_pieces_2,
+                segment_idx,
                 labels=None):
-        transformer_output = self.get_sentence_vecs(sentences)
+        transformer_output = self.get_sentence_vecs(sentences, segment_idx)
         mention_reps_1 = self.get_mention_rep(transformer_output,
                                               start_pieces_1, end_pieces_1)
         mention_reps_2 = self.get_mention_rep(transformer_output,

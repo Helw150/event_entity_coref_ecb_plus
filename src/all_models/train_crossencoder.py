@@ -70,7 +70,7 @@ from model_utils import load_entity_wd_clusters
 from bcubed_scorer import *
 from coarse import *
 from fine import *
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
+from transformers import DebertaTokenizer
 from transformers.optimization import get_linear_schedule_with_warmup
 
 # Fix the random seeds
@@ -84,7 +84,7 @@ if args.use_cuda:
     torch.backends.cudnn.benchmark = False
     print('Training with CUDA')
 
-tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+tokenizer = DebertaTokenizer.from_pretrained("microsoft/deberta-large")
 best_score = None
 patience = 0
 comparison_set = set()
@@ -135,7 +135,7 @@ def structure_pair(mention_1,
                                        mention_1.sent_id, window)
         sents_2, sent_id_2 = get_sents(doc_dict[mention_2.doc_id].sentences,
                                        mention_2.sent_id, window)
-        tokens, token_map, offset_1, offset_2 = tokenize_and_map_pair(
+        tokens, segment_idx, token_map, offset_1, offset_2 = tokenize_and_map_pair(
             sents_1, sents_2, sent_id_1, sent_id_2, tokenizer)
         start_piece_1 = token_map[offset_1 + mention_1.start_offset][0]
         if offset_1 + mention_1.end_offset in token_map:
@@ -154,7 +154,8 @@ def structure_pair(mention_1,
             "start_piece_1": [start_piece_1],
             "end_piece_1": [end_piece_1],
             "start_piece_2": [start_piece_2],
-            "end_piece_2": [end_piece_2]
+            "end_piece_2": [end_piece_2],
+            "segment_idx": [segment_idx]
         }
     except:
         if window > 0:
@@ -204,8 +205,10 @@ def structure_dataset(data_set,
         [record["start_piece_2"] for record in processed_dataset])
     end_pieces_2 = torch.tensor(
         [record["end_piece_2"] for record in processed_dataset])
+    segment_idxs = torch.tensor(
+        [record["segment_idx"] for record in processed_dataset])
     print(labels.sum() / float(labels.shape[0]))
-    return TensorDataset(sentences, start_pieces_1, end_pieces_1,
+    return TensorDataset(sentences, segment_idxs, start_pieces_1, end_pieces_1,
                          start_pieces_2, end_pieces_2, labels), pairs, doc_dict
 
 
@@ -293,7 +296,7 @@ def is_cluster_merge(cluster_1, cluster_2, mentions, model, doc_dict):
                              start_pieces_2, end_pieces_2, labels)
             mean_prob = torch.mean(out_dict["probabilities"]).item()
             score += mean_prob
-    return (score / len(cluster_1)) >= 0.5
+    return (score / len(c_1)) >= 0.5
 
 
 def transitive_closure_merge(edges, mentions, model, doc_dict, graph,
@@ -361,11 +364,12 @@ def evaluate(model, encoder_model, dev_dataloader, dev_pairs, doc_dict,
     all_probs = []
     for step, batch in enumerate(tqdm(dev_dataloader, desc="Test Batch")):
         batch = tuple(t.to(model.device) for t in batch)
-        sentences, start_pieces_1, end_pieces_1, start_pieces_2, end_pieces_2, labels = batch
+        sentences, segment_idxs, start_pieces_1, end_pieces_1, start_pieces_2, end_pieces_2, labels = batch
         if not config_dict["oracle"]:
             with torch.no_grad():
                 out_dict = model(sentences, start_pieces_1, end_pieces_1,
-                                 start_pieces_2, end_pieces_2, labels)
+                                 start_pieces_2, end_pieces_2, segment_idxs,
+                                 labels)
         else:
             out_dict = {
                 "accuracy": 1.0,
@@ -488,9 +492,10 @@ def train_model(train_set, dev_set):
         batcher = tqdm(train_dataloader, desc="Batch")
         for step, batch in enumerate(batcher):
             batch = tuple(t.to(device) for t in batch)
-            sentences, start_pieces_1, end_pieces_1, start_pieces_2, end_pieces_2, labels = batch
+            sentences, segment_idxs, start_pieces_1, end_pieces_1, start_pieces_2, end_pieces_2, labels = batch
             out_dict = model(sentences, start_pieces_1, end_pieces_1,
-                             start_pieces_2, end_pieces_2, labels)
+                             start_pieces_2, end_pieces_2, segment_idxs,
+                             labels)
             loss = out_dict["loss"]
             precision = out_dict["precision"]
             accuracy = out_dict["accuracy"]
