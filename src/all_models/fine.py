@@ -15,8 +15,15 @@ def get_raw_strings(sentences, mention_sentence, mapping=None):
     else:
         mapping = {}
     for i, sentence in enumerate(sentences):
-        raw_strings.append(' '.join(
-            [tok.replace(" ", "") for tok in sentence.get_tokens_strings()]))
+        blacklist = []
+        if i != mention_sentence:
+            for mention in sentence.gold_entity_mentions:
+                blacklist.extend(mention.tokens_numbers)
+        raw_strings.append(' '.join([
+            tok.get_token().replace(" ", "") if
+            (int(tok.token_id) not in blacklist) else "[MASK]"
+            for tok in sentence.get_tokens()
+        ]))
         if i == mention_sentence:
             mention_offset = offset
         for _ in sentence.get_tokens_strings():
