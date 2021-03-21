@@ -463,7 +463,7 @@ def train_model(train_set, dev_set):
     train_event_pairs, _, _ = structure_dataset(train_set,
                                                 event_encoder,
                                                 events=config_dict["events"],
-                                                k=5,
+                                                k=10,
                                                 is_train=True)
     dev_event_pairs, dev_pairs, dev_docs = structure_dataset(
         dev_set, event_encoder, events=config_dict["events"], k=5)

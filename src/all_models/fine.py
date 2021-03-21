@@ -16,9 +16,6 @@ def get_raw_strings(sentences, mention_sentence, mapping=None):
         mapping = {}
     for i, sentence in enumerate(sentences):
         blacklist = []
-        if i != mention_sentence:
-            for mention in sentence.gold_entity_mentions:
-                blacklist.extend(mention.tokens_numbers)
         raw_strings.append(' '.join([
             tok.get_token().replace(" ", "") if
             (int(tok.token_id) not in blacklist) else "[MASK]"
@@ -58,65 +55,6 @@ def tokenize_and_map_pair(sentences_1, sentences_2, mention_sentence_1,
     return embeddings, mapping, mention_offset_1, mention_offset_2
 
 
-class CoreferenceMetricLearner(nn.Module):
-    def __init__(self, device, mention_model_params):
-        super(CoreferenceMetricLearner, self).__init__()
-        self.device = device
-        self.pos_weight = torch.tensor([0.1]).to(device)
-        self.model_type = 'CoreferenceMetricLearner'
-        self.event_encoder = EncoderCosineRanker(device)
-        self.event_encoder.load_state_dict(mention_model_params)
-        self.mention_dim = 1536
-        self.input_dim = self.mention_dim * 3
-        self.out_dim = 1
-
-        self.dropout = nn.Dropout(p=0.5)
-        self.hidden_layer_1 = nn.Linear(self.input_dim, self.mention_dim)
-        self.hidden_layer_2 = nn.Linear(self.mention_dim, self.mention_dim)
-        self.out_layer = nn.Linear(self.mention_dim, self.out_dim)
-
-    def forward(self,
-                sentence_1,
-                sentence_2,
-                start_pieces_1,
-                end_pieces_1,
-                start_pieces_2,
-                end_pieces_2,
-                labels=None):
-        transformer_output_1 = self.event_encoder.get_sentence_vecs(sentence_1)
-        transformer_output_2 = self.event_encoder.get_sentence_vecs(sentence_2)
-        mention_reps_1 = self.event_encoder.get_mention_rep(
-            transformer_output_1, start_pieces_1, end_pieces_1).squeeze(1)
-        mention_reps_2 = self.event_encoder.get_mention_rep(
-            transformer_output_2, start_pieces_2, end_pieces_2).squeeze(1)
-        combined_rep = torch.cat(
-            [mention_reps_1, mention_reps_2, mention_reps_1 * mention_reps_2],
-            dim=1)
-        combined_rep = self.dropout(combined_rep)
-        first_hidden = F.relu(self.hidden_layer_1(combined_rep))
-        second_hidden = F.relu(self.hidden_layer_2(first_hidden))
-        out = self.out_layer(second_hidden)
-        probs = F.sigmoid(out)
-        predictions = torch.where(probs > 0.5, 1.0, 0.0)
-        output_dict = {"probabilities": probs, "predictions": predictions}
-        if labels is not None:
-            loss_fct = nn.BCEWithLogitsLoss()
-            correct = torch.sum(predictions == labels)
-            total = float(predictions.shape[0])
-            acc = correct / total
-            if torch.sum(predictions).item() != 0:
-                precision = torch.sum(
-                    (predictions == labels).float() * predictions == 1) / (
-                        torch.sum(predictions) + sys.float_info.epsilon)
-            else:
-                precision = torch.tensor(1.0).to(self.device)
-            output_dict["accuracy"] = acc
-            output_dict["precision"] = precision
-            loss = loss_fct(out, labels)
-            output_dict["loss"] = loss
-        return output_dict
-
-
 class CoreferenceCrossEncoder(nn.Module):
     def __init__(self, device):
         super(CoreferenceCrossEncoder, self).__init__()
@@ -125,8 +63,9 @@ class CoreferenceCrossEncoder(nn.Module):
         self.model_type = 'CoreferenceCrossEncoder'
         self.mention_model = RobertaModel.from_pretrained('roberta-large',
                                                           return_dict=True)
-        self.mention_dim = 1536
-        self.input_dim = self.mention_dim * 3
+        self.word_embedding_dim = self.mention_model.embeddings.word_embeddings.embedding_dim
+        self.mention_dim = self.word_embedding_dim * 2
+        self.input_dim = int(self.mention_dim * 3)
         self.out_dim = 1
 
         self.dropout = nn.Dropout(p=0.5)
@@ -141,11 +80,13 @@ class CoreferenceCrossEncoder(nn.Module):
         return transformer_output
 
     def get_mention_rep(self, transformer_output, start_pieces, end_pieces):
-        start_pieces = start_pieces.repeat(1, 768).view(-1, 1, 768)
+        start_pieces = start_pieces.repeat(1, self.word_embedding_dim).view(
+            -1, 1, self.word_embedding_dim)
         start_piece_vec = torch.gather(transformer_output, 1, start_pieces)
         end_piece_vec = torch.gather(
             transformer_output, 1,
-            end_pieces.repeat(1, 768).view(-1, 1, 768))
+            end_pieces.repeat(1, self.word_embedding_dim).view(
+                -1, 1, self.word_embedding_dim))
         mention_rep = torch.cat([start_piece_vec, end_piece_vec],
                                 dim=2).squeeze(1)
         return mention_rep
